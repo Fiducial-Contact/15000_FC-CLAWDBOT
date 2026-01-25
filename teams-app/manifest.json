@@ -1,0 +1,41 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "1.0.0",
+  "id": "75dd7001-a533-4370-a7c1-a103effaeb7e",
+  "developer": {
+    "name": "Fiducial Communications",
+    "websiteUrl": "https://fiducialcommunications.com",
+    "privacyUrl": "https://fiducialcommunications.com/privacy",
+    "termsOfUseUrl": "https://fiducialcommunications.com/terms"
+  },
+  "name": {
+    "short": "Haiwei's Unpaid Intern",
+    "full": "Haiwei's Unpaid Intern - AI Assistant"
+  },
+  "description": {
+    "short": "AI assistant for Fiducial team",
+    "full": "Haiwei's AI-powered assistant for the Fiducial Communications team. Ask questions, get help with tasks, and more."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#5B6DEF",
+  "bots": [
+    {
+      "botId": "75dd7001-a533-4370-a7c1-a103effaeb7e",
+      "scopes": ["personal", "team", "groupChat"],
+      "isNotificationOnly": false,
+      "supportsCalling": false,
+      "supportsVideo": false,
+      "supportsFiles": true
+    }
+  ],
+  "validDomains": [
+    "haiweis-macbook-pro.tail297e45.ts.net"
+  ],
+  "webApplicationInfo": {
+    "id": "75dd7001-a533-4370-a7c1-a103effaeb7e"
+  }
+}
