@@ -159,4 +159,35 @@ clawdbot/
 
 ---
 
+## Web Chat App
+
+Branded web chat interface for Fiducial Communications team to interact with their AI assistant.
+
+### Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **Styling**: Tailwind CSS + Fiducial brand tokens
+- **Auth**: Supabase Auth
+- **Backend**: Clawdbot Gateway WebSocket
+- **Deploy**: Vercel
+
+### Development
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Open http://localhost:3000
+
+### Gateway Connection
+
+```
+Host: 46.224.225.164:18789
+Agent: work (claude-sonnet-4-5)
+Methods: chat.send, chat.history, connect
+```
+
+---
+
 Built by Haiwei | Fiducial Communications | 2026-01-25
