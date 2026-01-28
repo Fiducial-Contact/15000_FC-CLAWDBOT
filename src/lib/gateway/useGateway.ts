@@ -27,6 +27,8 @@ interface Message {
 interface HistoryMessage {
   role: string;
   content: ChatContentBlock[] | string;
+  toolName?: string;
+  toolCallId?: string;
 }
 
 interface SendMessagePayload {
@@ -643,12 +645,23 @@ export function useGateway({ userId }: UseGatewayOptions) {
           const loadTime = Date.now();
           const loaded: Message[] = history.map((msg, idx) => {
             const m = msg as HistoryMessage;
-            const blocks = normalizeContentBlocks(m.content);
             const isToolResult = m.role === 'toolResult' || m.role === 'tool_result';
+            const contentText = extractTextFromContent(m.content);
+            const blocks = isToolResult
+              ? ([
+                  {
+                    type: 'toolCall',
+                    toolName: m.toolName || 'Tool',
+                    toolCallId: m.toolCallId,
+                    result: contentText,
+                    status: 'completed',
+                  },
+                ] as ChatContentBlock[])
+              : normalizeContentBlocks(m.content);
             return {
               id: `hist_${sessionHash}_${loadTime}_${idx}`,
               sessionKey: currentSessionKey,
-              content: extractTextFromContent(m.content),
+              content: isToolResult ? '' : contentText,
               role: m.role === 'user' ? 'user' : 'assistant',
               isToolResult,
               timestamp: '',

@@ -613,7 +613,10 @@ export const ChatMessage = memo(function ChatMessage({
   const displayContent = isUser ? content : cleanedContent;
   const hasContent = displayContent && displayContent.trim().length > 0;
   const hasMedia = images.length > 0 || fileAttachments.length > 0;
-  if (!hasContent && !hasMedia) {
+  const hasRenderableBlocks =
+    !isUser &&
+    ((showThinking && thinkingBlocks.length > 0) || (showTools && toolCallBlocks.length > 0));
+  if (!hasContent && !hasMedia && !hasRenderableBlocks) {
     return null;
   }
 

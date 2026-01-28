@@ -142,6 +142,14 @@ const QUICK_SUGGESTIONS = [
   { icon: Megaphone, text: 'Write product copy for this', color: '#cd2e26' },
 ];
 
+const THINKING_PHRASES = [
+  'Thinking...',
+  'Checking references...',
+  'Looking up the best approach...',
+  'Putting it together...',
+  'Almost there...',
+];
+
 export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -152,16 +160,16 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const lastStreamLengthRef = useRef(0);
   const [sessionCopied, setSessionCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('fc-chat-show-details');
-        return stored === 'true';
-      } catch {
-        return false;
-      }
+    if (typeof window === 'undefined') return false;
+    try {
+      const stored = localStorage.getItem('fc-chat-show-details');
+      return stored === 'true';
+    } catch {
+      return false;
     }
-    return false;
   });
+  const [thinkingIndex, setThinkingIndex] = useState(0);
+  const [showThinkingText, setShowThinkingText] = useState(true);
 
   const {
     messages,
@@ -226,6 +234,19 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const allSuggestions = useMemo(() => {
     return CAPABILITY_CATEGORIES.flatMap((cat) => cat.suggestions);
   }, []);
+
+  useEffect(() => {
+    if (!isLoading || displayStreamingContent) return;
+    const interval = window.setInterval(() => {
+      setShowThinkingText(false);
+      window.setTimeout(() => {
+        setThinkingIndex((prev) => (prev + 1) % THINKING_PHRASES.length);
+        setShowThinkingText(true);
+      }, 400);
+    }, 4000);
+
+    return () => window.clearInterval(interval);
+  }, [isLoading, displayStreamingContent]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -600,7 +621,11 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                     >
-                      <AnimatedText text="Thinking..." className="text-sm text-[var(--fc-body-gray)]" />
+                      <AnimatedText
+                        text={THINKING_PHRASES[thinkingIndex]}
+                        isVisible={showThinkingText}
+                        className="text-sm text-[var(--fc-body-gray)]"
+                      />
                     </motion.div>
                   )}
                 </div>
