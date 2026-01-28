@@ -147,9 +147,9 @@ export function SkillsClient({ userEmail, userId }: SkillsClientProps) {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className={`absolute left-0 bottom-0 top-[2px] w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
-              <span className="pl-4 text-xs font-medium text-zinc-600">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
+              <span className="text-xs font-medium text-zinc-600">
                 {isConnected ? 'Gateway Connected' : 'Gateway Disconnected'}
               </span>
             </div>
