@@ -64,4 +64,78 @@ export interface SessionEntry {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  unreadCount?: number;
+}
+
+export type ChatContentBlockType = 'text' | 'thinking' | 'toolCall' | 'image' | 'image_url' | string;
+
+export interface ChatContentBlock {
+  type: ChatContentBlockType;
+  text?: string;
+  url?: string;
+  data?: string;
+  mimeType?: string;
+  fileName?: string;
+  [key: string]: unknown;
+}
+
+export type AttachmentKind = 'image' | 'file';
+
+export interface ChatAttachmentInput {
+  id: string;
+  file: File;
+  kind: AttachmentKind;
+  previewUrl?: string;
+}
+
+export interface ChatAttachment {
+  id: string;
+  kind: AttachmentKind;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  url?: string;
+  previewUrl?: string;
+  file?: File;
+  status?: 'uploading' | 'ready' | 'error';
+}
+
+export type ToolExecutionStatus = 'running' | 'completed' | 'failed';
+
+export interface ToolCallBlock extends ChatContentBlock {
+  type: 'toolCall';
+  toolCallId?: string;
+  toolName: string;
+  parameters?: Record<string, unknown>;
+  result?: unknown;
+  status?: ToolExecutionStatus;
+  error?: string;
+}
+
+export interface ThinkingBlock extends ChatContentBlock {
+  type: 'thinking';
+  text: string;
+}
+
+export function isToolCallBlock(block: ChatContentBlock): block is ToolCallBlock {
+  return block.type === 'toolCall';
+}
+
+export function isThinkingBlock(block: ChatContentBlock): block is ThinkingBlock {
+  return block.type === 'thinking';
+}
+
+export type ToolEventPhase = 'start' | 'update' | 'end';
+
+export interface ToolEventPayload {
+  runId: string;
+  sessionKey: string;
+  toolCallId: string;
+  toolName: string;
+  phase: ToolEventPhase;
+  parameters?: Record<string, unknown>;
+  output?: string;
+  outputDelta?: string;
+  status?: ToolExecutionStatus;
+  error?: string;
 }

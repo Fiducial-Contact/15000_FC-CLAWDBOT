@@ -1,18 +1,42 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
-import { LogOut, User } from 'lucide-react';
-import { motion } from 'motion/react';
+import { LogOut, Sparkles, ChevronDown, KeyRound } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface HeaderProps {
   userName?: string;
   onLogout?: () => void;
+  onChangePassword?: () => void;
 }
 
-export const Header = memo(function Header({ userName, onLogout }: HeaderProps) {
+export const Header = memo(function Header({ userName, onLogout, onChangePassword }: HeaderProps) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLogout = () => {
+    setIsDropdownOpen(false);
+    onLogout?.();
+  };
+
+  const handleChangePassword = () => {
+    setIsDropdownOpen(false);
+    onChangePassword?.();
+  };
+
   return (
-    <header className="bg-white border-b border-[var(--fc-border-gray)] px-4 md:px-6 py-3 shadow-[var(--shadow-sm)]">
+    <header className="bg-white/80 backdrop-blur-md border-b border-[var(--fc-border-gray)] px-4 md:px-6 py-3 sticky top-0 z-50">
       <div className="max-w-6xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Image
@@ -21,35 +45,85 @@ export const Header = memo(function Header({ userName, onLogout }: HeaderProps) 
             width={140}
             height={35}
             priority
-            className="h-8 w-auto"
+            className="h-7 w-auto"
           />
           <div className="hidden sm:flex items-center gap-2">
-            <div className="h-5 w-px bg-[var(--fc-border-gray)]" />
-            <span className="text-xs font-medium text-[var(--fc-light-gray)] uppercase tracking-wider">
-              AI Assistant
-            </span>
+            <div className="h-4 w-px bg-[var(--fc-border-gray)]" />
+            <div className="flex items-center gap-1.5">
+              <Sparkles size={12} className="text-[var(--fc-action-red)]" />
+              <span className="text-xs font-medium text-[var(--fc-body-gray)] uppercase tracking-wider">
+                AI Agent
+              </span>
+            </div>
           </div>
         </div>
 
         {userName && (
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-[var(--fc-off-white)] rounded-full">
-              <User size={14} className="text-[var(--fc-body-gray)]" />
-              <span className="text-sm text-[var(--fc-body-gray)]">
+          <div className="relative" ref={dropdownRef}>
+            <motion.button
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-all ${
+                isDropdownOpen
+                  ? 'bg-[var(--fc-subtle-gray)] ring-2 ring-[var(--fc-border-gray)]'
+                  : 'bg-[var(--fc-subtle-gray)] hover:bg-[var(--fc-border-gray)]'
+              }`}
+              whileTap={{ scale: 0.98 }}
+            >
+              <img
+                src="https://api.dicebear.com/9.x/lorelei/svg?seed=user&backgroundColor=262626"
+                alt="User avatar"
+                className="w-6 h-6 rounded-full"
+              />
+              <span className="hidden sm:block text-xs font-medium text-[var(--fc-dark-gray)] max-w-[120px] truncate">
                 {userName.split('@')[0]}
               </span>
-            </div>
-            {onLogout && (
-              <motion.button
-                onClick={onLogout}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[var(--fc-body-gray)] hover:text-[var(--fc-action-red)] hover:bg-red-50 rounded-full transition-all"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <LogOut size={14} />
-                <span className="hidden sm:inline">Sign out</span>
-              </motion.button>
-            )}
+              <ChevronDown
+                size={14}
+                className={`text-[var(--fc-body-gray)] transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}
+              />
+            </motion.button>
+
+            <AnimatePresence>
+              {isDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                  transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+                  className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-[var(--fc-border-gray)] overflow-hidden z-50"
+                >
+                  <div className="px-4 py-3 border-b border-[var(--fc-border-gray)] bg-[var(--fc-subtle-gray)]/50">
+                    <p className="text-sm font-medium text-[var(--fc-black)] truncate">
+                      {userName.split('@')[0]}
+                    </p>
+                    <p className="text-xs text-[var(--fc-body-gray)] truncate">
+                      {userName}
+                    </p>
+                  </div>
+
+                  <div className="py-1.5">
+                    {onChangePassword && (
+                      <button
+                        onClick={handleChangePassword}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--fc-dark-gray)] hover:bg-[var(--fc-subtle-gray)] transition-colors"
+                      >
+                        <KeyRound size={16} className="text-[var(--fc-body-gray)]" />
+                        Change Password
+                      </button>
+                    )}
+                    {onLogout && (
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--fc-action-red)] hover:bg-red-50 transition-colors"
+                      >
+                        <LogOut size={16} />
+                        Sign Out
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
       </div>

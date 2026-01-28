@@ -21,7 +21,7 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
-  title: "Fiducial AI Assistant",
+  title: "Fiducial AI Agent",
   description: "Team AI assistant for Fiducial Communications",
   icons: {
     icon: "/brand/favicon.png",

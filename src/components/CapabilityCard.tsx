@@ -2,6 +2,7 @@
 
 import { memo } from 'react';
 import { motion } from 'motion/react';
+import { ArrowRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 interface CapabilityCardProps {
@@ -10,7 +11,7 @@ interface CapabilityCardProps {
   description: string;
   color: string;
   onClick?: () => void;
-  index?: number;
+  delay?: number;
 }
 
 export const CapabilityCard = memo(function CapabilityCard({
@@ -19,28 +20,55 @@ export const CapabilityCard = memo(function CapabilityCard({
   description,
   color,
   onClick,
-  index = 0,
+  delay = 0,
 }: CapabilityCardProps) {
   return (
     <motion.button
       onClick={onClick}
-      className="flex flex-col items-center gap-2 p-4 bg-white border border-[var(--fc-border-gray)] rounded-2xl text-center hover:border-[var(--fc-action-red)] shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-md)] transition-all group cursor-pointer"
-      initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.12 + index * 0.06, duration: 0.32 }}
-      whileHover={{ scale: 1.02, y: -2 }}
-      whileTap={{ scale: 0.98 }}
+      className="group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-white border border-[var(--fc-border-gray)] cursor-pointer h-full min-h-[160px] text-left"
+      style={{
+        boxShadow: '0 0 0 1px rgba(0,0,0,.03), 0 2px 4px rgba(0,0,0,.05), 0 12px 24px rgba(0,0,0,.05)',
+      }}
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ delay, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div
-        className="w-12 h-12 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-        style={{ backgroundColor: `${color}15` }}
-      >
-        <Icon size={24} style={{ color }} />
+      {/* Content - moves up on hover */}
+      <div className="pointer-events-none z-10 flex transform-gpu flex-col gap-1.5 p-5 pt-6 transition-all duration-300 group-hover:-translate-y-6">
+        {/* Icon */}
+        <Icon
+          size={28}
+          style={{ color }}
+          strokeWidth={1.5}
+          className="mb-2 origin-left transform-gpu transition-all duration-300 ease-in-out group-hover:scale-75"
+        />
+
+        {/* Text */}
+        <h3
+          className="text-[17px] font-bold text-[var(--fc-black)] tracking-tight transition-colors duration-300 group-hover:text-[color:var(--hover-color)] font-[family-name:var(--font-manrope)]"
+          style={{ '--hover-color': color } as React.CSSProperties}
+        >
+          {title}
+        </h3>
+        <p className="text-[12px] text-[var(--fc-body-gray)] leading-relaxed">
+          {description}
+        </p>
       </div>
-      <span className="text-sm font-medium text-[var(--fc-black)] group-hover:text-[var(--fc-action-red)] transition-colors">
-        {title}
-      </span>
-      <span className="text-xs text-[var(--fc-body-gray)]">{description}</span>
+
+      {/* CTA - slides up on hover */}
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex w-full translate-y-8 transform-gpu flex-row items-center px-5 pb-5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+        <span
+          className="flex items-center gap-1.5 text-[12px] font-medium"
+          style={{ color }}
+        >
+          Try it
+          <ArrowRight size={14} />
+        </span>
+      </div>
+
+      {/* Hover overlay */}
+      <div className="pointer-events-none absolute inset-0 transform-gpu transition-all duration-300 group-hover:bg-black/[.02]" />
     </motion.button>
   );
 });

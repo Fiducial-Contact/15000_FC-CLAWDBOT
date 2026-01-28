@@ -2,39 +2,146 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { GatewayClient } from './client';
-import type { ChatEventPayload, SessionEntry } from './types';
+import type {
+  ChatAttachment,
+  ChatAttachmentInput,
+  ChatContentBlock,
+  ChatEventPayload,
+  SessionEntry,
+  ToolEventPayload,
+} from './types';
+import { uploadFileAndCreateSignedUrl } from '@/lib/storage/upload';
 
 interface Message {
   id: string;
   content: string;
   role: 'user' | 'assistant';
   timestamp: string;
-}
-
-interface ContentBlock {
-  type: string;
-  text?: string;
+  blocks?: ChatContentBlock[];
+  attachments?: ChatAttachment[];
+  sent?: boolean;
 }
 
 interface HistoryMessage {
   role: string;
-  content: ContentBlock[];
+  content: ChatContentBlock[] | string;
+}
+
+interface SendMessagePayload {
+  text: string;
+  attachments?: ChatAttachmentInput[];
+  sessionKey?: string;
 }
 
 interface UseGatewayOptions {
   userId: string;
 }
 
-function extractTextFromContent(content: unknown): string {
-  if (!content) return '';
-  if (typeof content === 'string') return content;
+function normalizeContentBlocks(content: unknown): ChatContentBlock[] {
+  if (!content) return [];
+  if (typeof content === 'string') {
+    return [{ type: 'text', text: content }];
+  }
   if (Array.isArray(content)) {
     return content
-      .filter((block: ContentBlock) => block.type === 'text' && block.text)
-      .map((block: ContentBlock) => block.text)
-      .join('');
+      .map((block) => normalizeBlock(block))
+      .filter((block): block is ChatContentBlock => Boolean(block && block.type));
   }
-  return '';
+  return [];
+}
+
+function normalizeBlock(raw: unknown): ChatContentBlock | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const block = raw as Record<string, unknown>;
+  const type = typeof block.type === 'string' ? block.type : '';
+  if (!type) return null;
+
+  if (type === 'thinking') {
+    const text =
+      typeof block.text === 'string'
+        ? block.text
+        : typeof block.thinking === 'string'
+          ? block.thinking
+          : '';
+    return { ...block, type: 'thinking', text } as ChatContentBlock;
+  }
+
+  if (type === 'toolCall' || type === 'tool_call') {
+    const toolName =
+      typeof block.toolName === 'string'
+        ? block.toolName
+        : typeof block.name === 'string'
+          ? block.name
+          : '';
+    const toolCallId =
+      typeof block.toolCallId === 'string'
+        ? block.toolCallId
+        : typeof block.id === 'string'
+          ? block.id
+          : undefined;
+    let parameters = (block.parameters as Record<string, unknown> | undefined) ?? undefined;
+    const args = block.arguments;
+    if (!parameters && args) {
+      if (typeof args === 'string') {
+        try {
+          parameters = JSON.parse(args) as Record<string, unknown>;
+        } catch {
+          parameters = { raw: args };
+        }
+      } else if (typeof args === 'object') {
+        parameters = args as Record<string, unknown>;
+      }
+    }
+    const result = block.result ?? block.output;
+    const error = typeof block.error === 'string' ? block.error : undefined;
+
+    return {
+      ...block,
+      type: 'toolCall',
+      toolName,
+      toolCallId,
+      parameters,
+      result,
+      error,
+    } as ChatContentBlock;
+  }
+
+  if (type === 'toolResult' || type === 'tool_result') {
+    const toolName =
+      typeof block.toolName === 'string'
+        ? block.toolName
+        : typeof block.name === 'string'
+          ? block.name
+          : 'Tool Result';
+    const toolCallId =
+      typeof block.toolCallId === 'string'
+        ? block.toolCallId
+        : typeof block.id === 'string'
+          ? block.id
+          : undefined;
+    const result = block.result ?? block.output ?? block.content;
+    const error = typeof block.error === 'string' ? block.error : undefined;
+    return {
+      ...block,
+      type: 'toolCall',
+      toolName,
+      toolCallId,
+      result,
+      status: 'completed',
+      error,
+    } as ChatContentBlock;
+  }
+
+  return block as ChatContentBlock;
+}
+
+function extractTextFromContent(content: unknown): string {
+  const blocks = normalizeContentBlocks(content);
+  if (blocks.length === 0) return '';
+  return blocks
+    .filter((block) => block.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text)
+    .join('');
 }
 
 function formatTimestamp(): string {
@@ -52,6 +159,38 @@ function generateSessionTitle(message: string): string {
   const cleaned = message.trim().replace(/\s+/g, ' ');
   if (cleaned.length <= 30) return cleaned;
   return cleaned.slice(0, 30).trim() + '...';
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      const base64 = result.split(',')[1] || '';
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildFileUrlText(entries: Array<{ name: string; url: string }>) {
+  if (entries.length === 0) return '';
+  return entries.map((entry) => `File: ${entry.name}\nURL: ${entry.url}`).join('\n');
+}
+
+function buildOutboundText(params: {
+  text: string;
+  fileUrlText: string;
+  hasImages: boolean;
+  hasFiles: boolean;
+}) {
+  const { text, fileUrlText, hasImages, hasFiles } = params;
+  const outboundParts: string[] = [];
+  if (text) outboundParts.push(text);
+  if (fileUrlText) outboundParts.push(fileUrlText);
+  const fallbackText = hasImages && !hasFiles ? 'Attached image(s).' : 'Attached file(s).';
+  return outboundParts.join('\n\n') || fallbackText;
 }
 
 const CURRENT_SESSION_KEY = 'fc-chat-current-session';
@@ -99,6 +238,8 @@ export function useGateway({ userId }: UseGatewayOptions) {
   const [error, setError] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isDraftSession, setIsDraftSession] = useState(false);
+  const [activeTools, setActiveTools] = useState<Map<string, ToolEventPayload>>(new Map());
 
   const clientRef = useRef<GatewayClient | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
@@ -107,8 +248,12 @@ export function useGateway({ userId }: UseGatewayOptions) {
   const streamFrameRef = useRef<number | null>(null);
   const currentSessionKeyRef = useRef(currentSessionKey);
   const sessionsRef = useRef(sessions);
+  const messagesRef = useRef(messages);
   const canPatchSessionsRef = useRef(true);
   const pendingSessionsRef = useRef(new Set<string>());
+  const isDraftSessionRef = useRef(isDraftSession);
+  const skipHistoryLoadRef = useRef(false);
+  const toolRemovalTimersRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (userId && !currentSessionKey) {
@@ -146,6 +291,29 @@ export function useGateway({ userId }: UseGatewayOptions) {
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const resetStreamingState = useCallback(() => {
+    if (streamFrameRef.current !== null) {
+      cancelAnimationFrame(streamFrameRef.current);
+      streamFrameRef.current = null;
+    }
+    streamPendingRef.current = '';
+    streamBufferRef.current = '';
+    setStreamingContent('');
+    setIsLoading(false);
+    currentRunIdRef.current = null;
+    setActiveTools(new Map());
+    toolRemovalTimersRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    toolRemovalTimersRef.current.clear();
+  }, []);
+
+  const updateMessage = useCallback((messageId: string, updater: (message: Message) => Message) => {
+    setMessages((prev) => prev.map((message) => (message.id === messageId ? updater(message) : message)));
+  }, []);
 
   const applyGatewaySessions = useCallback(
     (sessionList: SessionEntry[]) => {
@@ -231,6 +399,10 @@ export function useGateway({ userId }: UseGatewayOptions) {
           canPatchSessionsRef.current = false;
           return;
         }
+        if (message.toLowerCase().includes('unexpected property') && message.includes('displayName')) {
+          // Backend doesn't support displayName field, skip silently
+          return;
+        }
         console.error('Failed to update session title:', err);
       }
     },
@@ -286,16 +458,19 @@ export function useGateway({ userId }: UseGatewayOptions) {
           streamFrameRef.current = null;
         }
         streamPendingRef.current = '';
-        const finalText =
-          streamBufferRef.current ||
-          extractTextFromContent((event.message as { content?: unknown })?.content);
+        const messageContent = (event.message as { content?: unknown })?.content;
+        const blocks = normalizeContentBlocks(messageContent);
+        const finalText = streamBufferRef.current || extractTextFromContent(messageContent);
 
-        if (finalText) {
+        if (finalText || blocks.length > 0) {
+          const messageId = `${event.runId || 'msg'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
           const assistantMessage: Message = {
-            id: event.runId || Date.now().toString(),
+            id: messageId,
             content: finalText,
             role: 'assistant',
             timestamp: formatTimestamp(),
+            blocks: blocks.length > 0 ? blocks : undefined,
+            sent: true,
           };
           setMessages((prev) => [...prev, assistantMessage]);
         }
@@ -315,6 +490,46 @@ export function useGateway({ userId }: UseGatewayOptions) {
         setStreamingContent('');
         setIsLoading(false);
         currentRunIdRef.current = null;
+      }
+    });
+
+    const unsubscribeTool = client.onTool((event: ToolEventPayload) => {
+      if (event.sessionKey !== currentSessionKeyRef.current) return;
+      if (!event.toolCallId) return;
+
+      const toolId = event.toolCallId;
+      const existingTimeout = toolRemovalTimersRef.current.get(toolId);
+      if (existingTimeout) {
+        window.clearTimeout(existingTimeout);
+        toolRemovalTimersRef.current.delete(toolId);
+      }
+
+      setActiveTools((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(toolId);
+        const nextOutput = event.outputDelta
+          ? `${existing?.output ?? ''}${event.outputDelta}`
+          : event.output ?? existing?.output;
+
+        next.set(toolId, {
+          ...existing,
+          ...event,
+          output: nextOutput,
+        });
+
+        return next;
+      });
+
+      if (event.phase === 'end') {
+        const timeoutId = window.setTimeout(() => {
+          setActiveTools((prev) => {
+            const next = new Map(prev);
+            next.delete(toolId);
+            return next;
+          });
+          toolRemovalTimersRef.current.delete(toolId);
+        }, 3000);
+        toolRemovalTimersRef.current.set(toolId, timeoutId);
       }
     });
 
@@ -342,12 +557,15 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
     return () => {
       unsubscribe();
+      unsubscribeTool();
       client.disconnect();
       clientRef.current = null;
       if (streamFrameRef.current !== null) {
         cancelAnimationFrame(streamFrameRef.current);
         streamFrameRef.current = null;
       }
+      toolRemovalTimersRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      toolRemovalTimersRef.current.clear();
     };
   }, [userId, applyGatewaySessions]);
 
@@ -356,17 +574,27 @@ export function useGateway({ userId }: UseGatewayOptions) {
       return;
     }
 
+    if (skipHistoryLoadRef.current) {
+      skipHistoryLoadRef.current = false;
+      return;
+    }
+
     const loadHistory = async () => {
       try {
         const history = await clientRef.current!.getHistory(currentSessionKey);
         if (Array.isArray(history) && history.length > 0) {
+          const sessionHash = currentSessionKey.slice(-8);
+          const loadTime = Date.now();
           const loaded: Message[] = history.map((msg, idx) => {
             const m = msg as HistoryMessage;
+            const blocks = normalizeContentBlocks(m.content);
             return {
-              id: `hist_${idx}`,
+              id: `hist_${sessionHash}_${loadTime}_${idx}`,
               content: extractTextFromContent(m.content),
               role: m.role === 'user' ? 'user' : 'assistant',
               timestamp: '',
+              blocks: blocks.length > 0 ? blocks : undefined,
+              sent: true,
             };
           });
           setMessages(loaded);
@@ -396,22 +624,72 @@ export function useGateway({ userId }: UseGatewayOptions) {
     loadHistory();
   }, [currentSessionKey, isConnected, updateSessionTitle]);
 
+  const commitDraftSession = useCallback(() => {
+    const newSessionId = generateSessionId();
+    const peerId = buildPeerId(userId, newSessionId);
+    const newSessionKey = buildSessionKey(peerId);
+
+    const newSession: SessionEntry = {
+      sessionKey: newSessionKey,
+      sessionId: newSessionId,
+      displayName: `New Chat`,
+      updatedAt: new Date().toISOString(),
+    };
+
+    skipHistoryLoadRef.current = true;
+    setSessions((prev) => [newSession, ...prev]);
+    setCurrentSessionKey(newSessionKey);
+    currentSessionKeyRef.current = newSessionKey;
+    pendingSessionsRef.current.add(newSessionKey);
+    setIsDraftSession(false);
+    isDraftSessionRef.current = false;
+    return newSessionKey;
+  }, [userId]);
+
   const sendMessage = useCallback(
-    async (content: string) => {
+    async ({ text, attachments = [], sessionKey }: SendMessagePayload) => {
       if (!clientRef.current || !clientRef.current.isConnected()) {
         setError('Not connected to gateway');
         return;
       }
 
+      let activeSessionKey = sessionKey || currentSessionKeyRef.current || currentSessionKey;
+
+      if (isDraftSessionRef.current && !sessionKey) {
+        activeSessionKey = commitDraftSession();
+      }
+
+      if (!activeSessionKey) {
+        setError('No active session');
+        return;
+      }
+
+      const trimmedText = text.trim();
+      const isFirstMessage = messages.length === 0;
+      const imageInputs = attachments.filter((item) => item.kind === 'image');
+      const fileInputs = attachments.filter((item) => item.kind === 'file');
+
+      const messageId = crypto.randomUUID();
+      const displayAttachments: ChatAttachment[] = attachments.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        fileName: item.file.name,
+        mimeType: item.file.type || 'application/octet-stream',
+        size: item.file.size,
+        previewUrl: item.previewUrl,
+        file: item.file,
+        status: item.kind === 'file' ? 'uploading' : 'ready',
+      }));
+
       const userMessage: Message = {
-        id: Date.now().toString(),
-        content,
+        id: messageId,
+        content: trimmedText,
         role: 'user',
         timestamp: formatTimestamp(),
+        attachments: displayAttachments.length > 0 ? displayAttachments : undefined,
+        sent: false,
       };
 
-      const isFirstMessage = messages.length === 0;
-      
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
       setError(null);
@@ -419,52 +697,214 @@ export function useGateway({ userId }: UseGatewayOptions) {
       setStreamingContent('');
 
       if (isFirstMessage) {
-        const newTitle = generateSessionTitle(content);
-        updateSessionTitle(currentSessionKey, newTitle);
+        const titleSeed = trimmedText || (imageInputs.length > 0 ? 'Image' : fileInputs.length > 0 ? 'File' : '');
+        if (titleSeed) {
+          const newTitle = generateSessionTitle(titleSeed);
+          updateSessionTitle(activeSessionKey, newTitle);
+        }
       }
+
+      let fileUrlText = '';
+      if (fileInputs.length > 0) {
+        try {
+          const uploadResults = await Promise.all(
+            fileInputs.map(async (item) => {
+              const upload = await uploadFileAndCreateSignedUrl({
+                file: item.file,
+                userId,
+              });
+              return { id: item.id, url: upload.signedUrl, name: item.file.name };
+            })
+          );
+
+          const urlById = new Map(uploadResults.map((result) => [result.id, result.url]));
+          const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) => {
+            if (item.kind !== 'file') return item;
+            const url = urlById.get(item.id);
+            const status: ChatAttachment['status'] = url ? 'ready' : 'error';
+            return { ...item, url, status };
+          });
+
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === messageId ? { ...message, attachments: updatedAttachments } : message
+            )
+          );
+
+          fileUrlText = buildFileUrlText(
+            uploadResults.map((result) => ({ name: result.name, url: result.url }))
+          );
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to upload file');
+          const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) =>
+            item.kind === 'file' ? { ...item, status: 'error' } : item
+          );
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === messageId ? { ...message, attachments: updatedAttachments } : message
+            )
+          );
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const outboundText = buildOutboundText({
+        text: trimmedText,
+        fileUrlText,
+        hasImages: imageInputs.length > 0,
+        hasFiles: fileInputs.length > 0,
+      });
+
+      const gatewayAttachments = imageInputs.length
+        ? await Promise.all(
+            imageInputs.map(async (item) => ({
+              type: 'image' as const,
+              mimeType: item.file.type || 'image/png',
+              fileName: item.file.name,
+              content: await fileToBase64(item.file),
+            }))
+          )
+        : undefined;
 
       try {
         const idempotencyKey = crypto.randomUUID();
         await clientRef.current.sendMessage({
-          sessionKey: currentSessionKey,
-          message: content,
+          sessionKey: activeSessionKey,
+          message: outboundText,
           idempotencyKey,
+          attachments: gatewayAttachments,
         });
+        updateMessage(messageId, (message) => ({ ...message, sent: true }));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to send message');
         setIsLoading(false);
       }
     },
-    [currentSessionKey, messages.length, updateSessionTitle]
+    [currentSessionKey, messages.length, updateSessionTitle, userId, commitDraftSession]
+  );
+
+  const retryFileAttachment = useCallback(
+    async (messageId: string, attachmentId: string) => {
+      if (!clientRef.current || !clientRef.current.isConnected()) {
+        setError('Not connected to gateway');
+        return;
+      }
+
+      const message = messagesRef.current.find((item) => item.id === messageId);
+      if (!message || message.sent) {
+        return;
+      }
+
+      const attachments = message.attachments || [];
+      const imageInputs = attachments.filter((item) => item.kind === 'image' && item.file);
+      const fileTargets = attachments.filter(
+        (item) => item.kind === 'file' && item.file && item.id === attachmentId
+      );
+
+      if (fileTargets.length === 0) return;
+
+      setIsLoading(true);
+      setError(null);
+
+      updateMessage(messageId, (current) => {
+        const nextAttachments = (current.attachments || []).map((item) =>
+          item.id === attachmentId
+            ? { ...item, status: 'uploading' as ChatAttachment['status'] }
+            : item
+        );
+        return { ...current, attachments: nextAttachments };
+      });
+
+      let updatedAttachments = attachments;
+      try {
+        const uploadResults = await Promise.all(
+          fileTargets.map(async (item) => {
+            const upload = await uploadFileAndCreateSignedUrl({
+              file: item.file!,
+              userId,
+            });
+            return { id: item.id, url: upload.signedUrl, name: item.fileName };
+          })
+        );
+
+        const urlById = new Map(uploadResults.map((result) => [result.id, result.url]));
+        updatedAttachments = attachments.map((item) => {
+          if (item.kind !== 'file') return item;
+          if (item.id !== attachmentId) return item;
+          const url = urlById.get(item.id);
+          const status: ChatAttachment['status'] = url ? 'ready' : 'error';
+          return { ...item, url, status };
+        });
+
+        updateMessage(messageId, (current) => ({ ...current, attachments: updatedAttachments }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to upload file');
+        updatedAttachments = attachments.map((item) =>
+          item.kind === 'file' && item.id === attachmentId ? { ...item, status: 'error' } : item
+        );
+        updateMessage(messageId, (current) => ({ ...current, attachments: updatedAttachments }));
+        setIsLoading(false);
+        return;
+      }
+
+      const fileEntries = updatedAttachments
+        .filter((item) => item.kind === 'file' && item.url)
+        .map((item) => ({ name: item.fileName, url: item.url! }));
+      const fileUrlText = buildFileUrlText(fileEntries);
+      const outboundText = buildOutboundText({
+        text: message.content.trim(),
+        fileUrlText,
+        hasImages: imageInputs.length > 0,
+        hasFiles: updatedAttachments.some((item) => item.kind === 'file'),
+      });
+
+      const gatewayAttachments = imageInputs.length
+        ? await Promise.all(
+            imageInputs.map(async (item) => ({
+              type: 'image' as const,
+              mimeType: item.mimeType || item.file?.type || 'image/png',
+              fileName: item.fileName,
+              content: await fileToBase64(item.file!),
+            }))
+          )
+        : undefined;
+
+      try {
+        const idempotencyKey = crypto.randomUUID();
+        await clientRef.current.sendMessage({
+          sessionKey: currentSessionKeyRef.current || currentSessionKey,
+          message: outboundText,
+          idempotencyKey,
+          attachments: gatewayAttachments,
+        });
+        updateMessage(messageId, (current) => ({ ...current, sent: true }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to send message');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentSessionKey, updateMessage, userId]
   );
 
   const createNewSession = useCallback(() => {
-    const newSessionId = generateSessionId();
-    const peerId = buildPeerId(userId, newSessionId);
-    const newSessionKey = buildSessionKey(peerId);
-    
-    const newSession: SessionEntry = {
-      sessionKey: newSessionKey,
-      sessionId: newSessionId,
-      displayName: `New Chat`,
-      updatedAt: new Date().toISOString(),
-    };
-    
-    setSessions((prev) => [newSession, ...prev]);
-    setCurrentSessionKey(newSessionKey);
-    currentSessionKeyRef.current = newSessionKey;
-    pendingSessionsRef.current.add(newSessionKey);
+    setIsDraftSession(true);
+    isDraftSessionRef.current = true;
+    resetStreamingState();
     setMessages([]);
-  }, [userId]);
+  }, [resetStreamingState]);
 
   const switchSession = useCallback((sessionKey: string) => {
-    if (sessionKey !== currentSessionKey) {
+    if (sessionKey !== currentSessionKey || isDraftSessionRef.current) {
+      setIsDraftSession(false);
+      isDraftSessionRef.current = false;
       setCurrentSessionKey(sessionKey);
+      currentSessionKeyRef.current = sessionKey;
+      resetStreamingState();
       setMessages([]);
-      setStreamingContent('');
-      streamBufferRef.current = '';
     }
-  }, [currentSessionKey]);
+  }, [currentSessionKey, resetStreamingState]);
 
   const deleteSession = useCallback(async (sessionKey: string) => {
     if (!clientRef.current || !clientRef.current.isConnected()) {
@@ -538,7 +978,10 @@ export function useGateway({ userId }: UseGatewayOptions) {
     error,
     streamingContent,
     isSidebarOpen,
+    isDraftSession,
+    activeTools,
     sendMessage,
+    retryFileAttachment,
     createNewSession,
     switchSession,
     deleteSession,

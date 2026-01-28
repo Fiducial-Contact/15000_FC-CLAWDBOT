@@ -174,8 +174,8 @@ p {
 /* Focus styles - Subtle Ring */
 *:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--fc-off-white), 0 0 0 4px var(--fc-action-red);
-  border-radius: 2px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
 }
 
 /* Custom Animations */
@@ -211,6 +211,42 @@ p {
 
 .markdown-content > *:last-child {
   margin-bottom: 0;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection color */
+::selection {
+  background-color: rgba(190, 30, 44, 0.15);
+  color: var(--fc-black);
+}
+
+/* Better textarea styling */
+textarea {
+  font-family: inherit;
+}
+
+/* Custom kbd styling */
+kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Glass morphism effect */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--fc-red) 0%, var(--fc-action-red) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* Syntax Highlighting - VS Code Dark Theme */

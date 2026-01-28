@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useMemo, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Sparkles,
   AlertCircle,
+  Zap,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useGateway } from '@/lib/gateway/useGateway';
@@ -23,6 +24,9 @@ import { ChatMessage } from '@/components/ChatMessage';
 import { ChatInput } from '@/components/ChatInput';
 import { ChatSidebar } from '@/components/ChatSidebar';
 import { CapabilityCard } from '@/components/CapabilityCard';
+import { ChangePasswordModal } from '@/components/ChangePasswordModal';
+import { ToolCard } from '@/components/ToolCard';
+import type { ChatAttachmentInput } from '@/lib/gateway/types';
 
 interface ChatClientProps {
   userEmail: string;
@@ -84,7 +88,7 @@ const CAPABILITY_CATEGORIES = [
     id: 'reminders',
     icon: Bell,
     title: 'Reminders',
-    description: 'Personal task management',
+    description: 'Task management',
     color: '#e20613',
     suggestions: [
       'Remind me in 10 minutes to join the meeting',
@@ -154,6 +158,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     error,
     streamingContent,
     isSidebarOpen,
+    isDraftSession,
+    activeTools,
+    retryFileAttachment,
     sendMessage,
     createNewSession,
     switchSession,
@@ -174,7 +181,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const threshold = 80;
+    const threshold = 100;
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
     isAutoScrollRef.current = distanceFromBottom < threshold;
@@ -195,25 +202,51 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     lastStreamLengthRef.current = streamLength;
   }, [messages.length, streamingContent, scrollToBottom]);
 
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/');
   };
 
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: userEmail,
+        password: currentPassword,
+      });
+      if (signInError) {
+        return { success: false, error: 'Current password is incorrect' };
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) {
+        return { success: false, error: updateError.message };
+      }
+      return { success: true };
+    } catch {
+      return { success: false, error: 'An unexpected error occurred' };
+    }
+  };
+
   const handleSuggestionClick = (text: string) => {
-    sendMessage(text);
+    sendMessage({ text });
   };
 
   const handleSurpriseMe = () => {
     const randomIndex = Math.floor(Math.random() * allSuggestions.length);
-    sendMessage(allSuggestions[randomIndex]);
+    handleSuggestionClick(allSuggestions[randomIndex]);
   };
 
-  const isEmpty = messages.length === 0 && !streamingContent;
+  const isEmpty = (messages.length === 0 && !streamingContent) || isDraftSession;
 
   return (
-    <div className="flex flex-col h-screen bg-[var(--fc-off-white)]">
-      <Header userName={userEmail} onLogout={handleLogout} />
+    <div className="flex flex-col h-screen bg-gradient-to-b from-[var(--fc-off-white)] to-white">
+      <Header
+        userName={userEmail}
+        onLogout={handleLogout}
+        onChangePassword={() => setIsPasswordModalOpen(true)}
+      />
 
       <div className="flex-1 flex overflow-hidden">
         <ChatSidebar
@@ -221,65 +254,84 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
           currentSessionKey={currentSessionKey}
           mainSessionKey={mainSessionKey}
           isOpen={isSidebarOpen}
-          onNewSession={createNewSession}
+          onNewSession={() => {
+            createNewSession();
+          }}
           onSelectSession={switchSession}
           onDeleteSession={deleteSession}
           onToggle={toggleSidebar}
         />
 
-        <main className="flex-1 overflow-hidden flex flex-col">
+        <main className="flex-1 overflow-hidden flex flex-col relative">
+          {/* Error Banner */}
           <AnimatePresence>
             {error && (
               <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
+                initial={{ opacity: 0, y: -20, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: 'auto' }}
+                exit={{ opacity: 0, y: -20, height: 0 }}
                 className="flex items-center gap-2 bg-amber-50 border-b border-amber-200 px-4 py-3 text-sm text-amber-800"
               >
-                <AlertCircle size={16} className="flex-shrink-0" />
+                <AlertCircle size={16} className="flex-shrink-0 text-amber-600" />
                 <span>{error}</span>
               </motion.div>
             )}
           </AnimatePresence>
 
+          {/* Messages Area */}
           <div
             ref={scrollContainerRef}
-            className="flex-1 overflow-y-auto"
+            className="flex-1 overflow-y-auto scroll-smooth"
             onScroll={handleScroll}
           >
-            <div className="max-w-3xl mx-auto px-4 py-4 transition-all duration-300">
+            <div className="max-w-3xl mx-auto px-4 py-6">
               {isEmpty ? (
                 <motion.div
-                  className="text-center py-10"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  className="min-h-[calc(100vh-280px)] flex flex-col justify-center"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   transition={{ duration: 0.5 }}
                 >
+                  {/* Hero Section */}
                   <motion.div
-                    className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--fc-red)] to-[var(--fc-action-red)] mx-auto mb-5 flex items-center justify-center shadow-lg"
-                    initial={{ scale: 0.8, rotate: -10 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: 'spring', stiffness: 160, damping: 14 }}
+                    className="text-center mb-10"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
                   >
-                    <Bot size={36} className="text-white" />
-                  </motion.div>
+                    <motion.div
+                      className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--fc-red)] to-[var(--fc-action-red)] mx-auto mb-6 flex items-center justify-center shadow-xl"
+                      initial={{ scale: 0.8, rotate: -10 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+                    >
+                      <Bot size={40} className="text-white" />
+                    </motion.div>
 
-                  <h2 className="text-2xl font-bold text-[var(--fc-black)] mb-3">
-                    Hey! I&apos;m your unpaid intern.
-                  </h2>
-                  <p className="text-[var(--fc-body-gray)] max-w-md mx-auto mb-2">
-                    24/7 availability is expected. No salary, but endless enthusiasm.
-                  </p>
-                  <p className="text-xs text-[var(--fc-light-gray)] mb-8">
-                    Powered by Clawdbot
-                  </p>
+                    {/* 主标题 */}
+                    <h1 className="text-3xl md:text-4xl font-bold text-[var(--fc-black)] mb-3 tracking-tight">
+                      Hey! I'm Haiweis unpaid intern.
+                    </h1>
 
-                  <div className="mb-8">
-                    <p className="text-sm font-medium text-[var(--fc-body-gray)] mb-4">
-                      Here&apos;s what I can help you with:
+                    {/* 副标题 */}
+                    <p className="text-[var(--fc-body-gray)] max-w-md mx-auto mb-3 text-base leading-relaxed">
+                      24/7 availability is expected. No salary, but endless enthusiasm.
                     </p>
 
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-3xl mx-auto">
+                    {/* 品牌标识 */}
+                    <div className="flex items-center justify-center gap-1.5 text-sm text-[var(--fc-light-gray)]">
+                      <Zap size={12} />
+                      <span>Powered by Fiducial AI</span>
+                    </div>
+                  </motion.div>
+
+                  {/* Capability Bento Grid */}
+                  <div className="mb-8">
+                    <p className="text-[15px] font-semibold tracking-tight text-[var(--fc-body-gray)] mb-4 text-center font-[family-name:var(--font-manrope)]">
+                      Here's what I can help you with:
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {CAPABILITY_CATEGORIES.map((category, index) => (
                         <CapabilityCard
                           key={category.id}
@@ -287,7 +339,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                           title={category.title}
                           description={category.description}
                           color={category.color}
-                          index={index}
+                          delay={index * 0.05}
                           onClick={() =>
                             handleSuggestionClick(category.suggestions[0])
                           }
@@ -296,21 +348,26 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                     </div>
                   </div>
 
-                  <div>
-                    <p className="text-sm font-medium text-[var(--fc-body-gray)] mb-4">
+                  {/* Quick Suggestions */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4, duration: 0.5 }}
+                  >
+                    <p className="text-[15px] font-semibold tracking-tight text-[var(--fc-body-gray)] mb-4 text-center font-[family-name:var(--font-manrope)]">
                       Quick start:
                     </p>
 
-                    <div className="flex flex-wrap justify-center gap-2 max-w-2xl mx-auto mb-4">
+                    <div className="flex flex-wrap justify-center gap-2 max-w-2xl mx-auto mb-6">
                       {QUICK_SUGGESTIONS.map((suggestion, i) => (
                         <motion.button
                           key={i}
                           onClick={() => handleSuggestionClick(suggestion.text)}
-                          className="flex items-center gap-2 px-3 py-2 bg-white border border-[var(--fc-border-gray)] rounded-full text-sm hover:border-[var(--fc-action-red)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] transition-all group"
+                          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[var(--fc-border-gray)] rounded-full text-sm hover:border-[var(--fc-action-red)] hover:shadow-md transition-all group"
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.35 + i * 0.06 }}
-                          whileHover={{ scale: 1.02 }}
+                          transition={{ delay: 0.5 + i * 0.05 }}
+                          whileHover={{ scale: 1.03 }}
                           whileTap={{ scale: 0.98 }}
                         >
                           <suggestion.icon
@@ -326,36 +383,64 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
                     <motion.button
                       onClick={handleSurpriseMe}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white rounded-full text-sm font-medium shadow-[var(--shadow-md)] hover:shadow-[var(--shadow-lg)] transition-shadow"
+                      className="mx-auto flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white rounded-full text-sm font-medium shadow-lg hover:shadow-xl transition-shadow"
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.7 }}
+                      transition={{ delay: 0.8 }}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
                       <Sparkles size={16} />
                       Surprise Me
                     </motion.button>
-                  </div>
+                  </motion.div>
                 </motion.div>
               ) : (
-                <>
+                <div className="space-y-2 pb-4">
                   {messages.map((message) => (
                     <ChatMessage
                       key={message.id}
+                      messageId={message.id}
                       content={message.content}
+                      blocks={message.blocks}
+                      attachments={message.attachments}
                       role={message.role}
                       timestamp={message.timestamp}
+                      onRetryAttachment={retryFileAttachment}
                     />
                   ))}
 
                   {streamingContent && (
-                    <ChatMessage content={streamingContent} role="assistant" />
+                    <ChatMessage
+                      messageId="stream"
+                      content={streamingContent}
+                      role="assistant"
+                    />
+                  )}
+
+                  {activeTools.size > 0 && (
+                    <motion.div
+                      className="space-y-2 pl-12"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                    >
+                      {Array.from(activeTools.values()).map((tool) => (
+                        <ToolCard
+                          key={tool.toolCallId}
+                          toolName={tool.toolName}
+                          parameters={tool.parameters}
+                          result={tool.output}
+                          status={tool.phase === 'end' ? (tool.error ? 'failed' : 'completed') : 'running'}
+                          error={tool.error}
+                          isStreaming={tool.phase !== 'end'}
+                        />
+                      ))}
+                    </motion.div>
                   )}
 
                   {isLoading && !streamingContent && (
                     <motion.div
-                      className="flex items-center gap-3 text-[var(--fc-body-gray)] text-sm mb-4"
+                      className="flex items-center gap-3 text-[var(--fc-body-gray)] pl-12"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                     >
@@ -363,7 +448,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                         {[0, 1, 2].map((i) => (
                           <motion.span
                             key={i}
-                            className="w-2 h-2 bg-[var(--fc-action-red)] rounded-full"
+                            className="w-2 h-2 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] rounded-full"
                             animate={{ y: [0, -6, 0] }}
                             transition={{
                               duration: 0.6,
@@ -373,23 +458,32 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                           />
                         ))}
                       </div>
-                      <span>Thinking...</span>
+                      <span className="text-sm">Thinking...</span>
                     </motion.div>
                   )}
-                </>
+                </div>
               )}
               <div ref={messagesEndRef} />
             </div>
           </div>
 
+          {/* Chat Input */}
           <ChatInput
-            onSend={sendMessage}
+            onSend={(message: string, attachments: ChatAttachmentInput[]) =>
+              sendMessage({ text: message, attachments })
+            }
             onAbort={abortChat}
             disabled={isLoading || !isConnected}
             isLoading={isLoading}
           />
         </main>
       </div>
+
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+        onSubmit={handleChangePassword}
+      />
     </div>
   );
 }

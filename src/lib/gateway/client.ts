@@ -1,5 +1,5 @@
 import { getPublicKeyAsync, signAsync, utils } from '@noble/ed25519';
-import type { GatewayMessage, ChatEventPayload, SessionEntry } from './types';
+import type { GatewayMessage, ChatEventPayload, SessionEntry, ToolEventPayload } from './types';
 
 type Pending = {
   resolve: (value: unknown) => void;
@@ -73,6 +73,7 @@ type DeviceAuthStore = {
 };
 
 type ChatHandler = (event: ChatEventPayload) => void;
+type ToolHandler = (event: ToolEventPayload) => void;
 
 const IDENTITY_STORAGE_KEY = 'clawdbot-device-identity-v1';
 const DEVICE_AUTH_STORAGE_KEY = 'clawdbot.device.auth.v1';
@@ -295,6 +296,7 @@ export class GatewayClient {
   private requestId = 0;
   private pendingRequests = new Map<string, Pending>();
   private messageHandlers = new Set<ChatHandler>();
+  private toolHandlers = new Set<ToolHandler>();
   private connected = false;
   private connectNonce: string | null = null;
   private connectSent = false;
@@ -366,6 +368,23 @@ export class GatewayClient {
       const payload = msg.payload as ChatEventPayload;
       if (payload?.sessionKey) {
         this.messageHandlers.forEach(handler => handler(payload));
+      }
+    }
+
+    if (msg.type === 'event' && msg.event === 'tool') {
+      const payload = msg.payload as ToolEventPayload;
+      if (payload?.sessionKey) {
+        this.toolHandlers.forEach(handler => handler(payload));
+      }
+    }
+
+    if (msg.type === 'event' && msg.event === 'stream') {
+      const streamPayload = msg.payload as { stream?: string; payload?: unknown } | undefined;
+      if (streamPayload?.stream === 'tool') {
+        const payload = streamPayload.payload as ToolEventPayload;
+        if (payload?.sessionKey) {
+          this.toolHandlers.forEach(handler => handler(payload));
+        }
       }
     }
   }
@@ -498,16 +517,32 @@ export class GatewayClient {
     });
   }
 
-  async sendMessage(params: { sessionKey: string; message: string; idempotencyKey: string }) {
+  async sendMessage(params: {
+    sessionKey: string;
+    message: string;
+    idempotencyKey: string;
+    attachments?: Array<{
+      type: 'image';
+      mimeType: string;
+      fileName?: string;
+      content: string;
+    }>;
+  }) {
     if (!this.connected) {
       throw new Error('Not connected to gateway');
     }
 
-    const result = await this.sendRequest('chat.send', {
+    const payload: Record<string, unknown> = {
       sessionKey: params.sessionKey,
       message: params.message,
       idempotencyKey: params.idempotencyKey,
-    });
+    };
+
+    if (params.attachments && params.attachments.length > 0) {
+      payload.attachments = params.attachments;
+    }
+
+    const result = await this.sendRequest('chat.send', payload);
 
     return result as { runId?: string; status?: string };
   }
@@ -570,6 +605,11 @@ export class GatewayClient {
     return () => this.messageHandlers.delete(handler);
   }
 
+  onTool(handler: ToolHandler) {
+    this.toolHandlers.add(handler);
+    return () => this.toolHandlers.delete(handler);
+  }
+
   disconnect() {
     if (this.ws) {
       this.ws.close();
@@ -578,6 +618,7 @@ export class GatewayClient {
     this.connected = false;
     this.pendingRequests.clear();
     this.messageHandlers.clear();
+    this.toolHandlers.clear();
   }
 
   isConnected() {

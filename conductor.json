@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "setup": "test -f \"$CONDUCTOR_ROOT_PATH/.env.local\" && cp \"$CONDUCTOR_ROOT_PATH/.env.local\" .env.local || echo \"[conductor] .env.local not found at $CONDUCTOR_ROOT_PATH/.env.local\"; test -d \"$CONDUCTOR_ROOT_PATH/.vercel\" && cp -r \"$CONDUCTOR_ROOT_PATH/.vercel\" . || true; pnpm install",
+    "run": "pnpm dev -- -p $CONDUCTOR_PORT",
+    "archive": ""
+  },
+  "runScriptMode": "nonconcurrent"
+}

@@ -1,8 +1,17 @@
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, MessageSquare, Trash2, PanelLeftClose, PanelLeft, Pin } from 'lucide-react';
+import {
+  Plus,
+  MessageSquare,
+  Trash2,
+  PanelLeftClose,
+  PanelLeft,
+  Pin,
+  Clock,
+  History,
+} from 'lucide-react';
 import type { SessionEntry } from '@/lib/gateway/types';
 
 interface ChatSidebarProps {
@@ -16,13 +25,81 @@ interface ChatSidebarProps {
   onToggle: () => void;
 }
 
+interface TooltipProps {
+  children: React.ReactNode;
+  content: string;
+  position?: 'top' | 'right' | 'bottom' | 'left';
+  delay?: number;
+}
+
+// Tooltip Component for enhanced UX
+const Tooltip = memo(function Tooltip({
+  children,
+  content,
+  position = 'right',
+  delay = 300,
+}: TooltipProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [showTimeout, setShowTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    const timeout = setTimeout(() => setIsVisible(true), delay);
+    setShowTimeout(timeout);
+  }, [delay]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (showTimeout) clearTimeout(showTimeout);
+    setIsVisible(false);
+  }, [showTimeout]);
+
+  const positionClasses = {
+    top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
+    right: 'left-full top-1/2 -translate-y-1/2 ml-2',
+    bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
+    left: 'right-full top-1/2 -translate-y-1/2 mr-2',
+  };
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {children}
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+            className={`absolute z-50 px-2.5 py-1.5 bg-[var(--fc-black)] text-white text-xs rounded-lg whitespace-nowrap pointer-events-none ${positionClasses[position]}`}
+          >
+            {content}
+            <div
+              className={`absolute w-1.5 h-1.5 bg-[var(--fc-black)] rotate-45 ${position === 'right'
+                  ? 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2'
+                  : position === 'left'
+                    ? 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2'
+                    : position === 'top'
+                      ? 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2'
+                      : 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2'
+                }`}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+});
+
 function getSessionTitle(session: SessionEntry): string {
   if (session.displayName) return session.displayName;
-  if (!session.sessionKey) return 'Chat';
+  if (!session.sessionKey) return 'New Chat';
   const parts = session.sessionKey.split(':');
   const lastPart = parts[parts.length - 1];
   if (lastPart?.includes('-')) {
-    return `Chat ${lastPart.slice(0, 8)}`;
+    return `Chat ${lastPart.slice(0, 6)}`;
   }
   return 'Main Chat';
 }
@@ -34,11 +111,249 @@ function formatSessionDate(dateStr?: string): string {
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return 'Today';
+  if (diffDays === 0) {
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
   if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return date.toLocaleDateString();
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
+
+function groupSessionsByDate(sessions: SessionEntry[]) {
+  const groups: { label: string; sessions: SessionEntry[] }[] = [];
+  const today: SessionEntry[] = [];
+  const yesterday: SessionEntry[] = [];
+  const previous: SessionEntry[] = [];
+
+  sessions.forEach((session) => {
+    if (!session.updatedAt) {
+      previous.push(session);
+      return;
+    }
+    const date = new Date(session.updatedAt);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) today.push(session);
+    else if (diffDays === 1) yesterday.push(session);
+    else previous.push(session);
+  });
+
+  if (today.length > 0) groups.push({ label: 'Today', sessions: today });
+  if (yesterday.length > 0) groups.push({ label: 'Yesterday', sessions: yesterday });
+  if (previous.length > 0) groups.push({ label: 'Previous', sessions: previous });
+
+  return groups;
+}
+
+// Confirmation Dialog Component
+interface ConfirmDialogProps {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+const ConfirmDialog = memo(function ConfirmDialog({
+  isOpen,
+  title,
+  message,
+  confirmLabel = 'Delete',
+  cancelLabel = 'Cancel',
+  onConfirm,
+  onCancel,
+}: ConfirmDialogProps) {
+  if (!isOpen) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+        className="bg-white rounded-2xl shadow-2xl p-6 mx-4 max-w-sm w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+            <Trash2 size={18} className="text-[var(--fc-action-red)]" />
+          </div>
+          <h3 className="text-[16px] font-semibold text-[var(--fc-black)]">{title}</h3>
+        </div>
+        <p className="text-[14px] text-[var(--fc-body-gray)] mb-6 leading-relaxed">{message}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 text-[13px] font-medium text-[var(--fc-body-gray)] bg-[var(--fc-subtle-gray)] rounded-xl hover:bg-[var(--fc-border-gray)] transition-colors"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 px-4 py-2.5 text-[13px] font-medium text-white bg-[var(--fc-action-red)] rounded-xl hover:bg-[#c41922] transition-colors shadow-md"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+});
+
+// Empty State Component
+const EmptyState = memo(function EmptyState({ onNewSession }: { onNewSession: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+      className="flex flex-col items-center justify-center py-12 px-6 text-center"
+    >
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.1, duration: 0.3 }}
+        className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--fc-subtle-gray)] to-[var(--fc-border-gray)] flex items-center justify-center mb-4"
+      >
+        <History size={28} className="text-[var(--fc-light-gray)]" />
+      </motion.div>
+      <h3 className="text-[15px] font-semibold text-[var(--fc-black)] mb-2">
+        No conversations yet
+      </h3>
+      <p className="text-[13px] text-[var(--fc-body-gray)] mb-5 max-w-[200px]">
+        Start a new chat to begin your conversation
+      </p>
+      <motion.button
+        onClick={onNewSession}
+        className="flex items-center gap-2 px-4 py-2 bg-[var(--fc-black)] text-white rounded-xl text-[13px] font-medium shadow-md hover:shadow-lg transition-shadow"
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        <Plus size={16} />
+        Start New Chat
+      </motion.button>
+    </motion.div>
+  );
+});
+
+// Icon Rail Mode for collapsed sidebar
+const IconRail = memo(function IconRail({
+  sessions,
+  currentSessionKey,
+  mainSessionKey,
+  onNewSession,
+  onSelectSession,
+  onToggle,
+}: {
+  sessions: SessionEntry[];
+  currentSessionKey: string;
+  mainSessionKey: string;
+  onNewSession: () => void;
+  onSelectSession: (sessionKey: string) => void;
+  onToggle: () => void;
+}) {
+  const recentSessions = useMemo(() => {
+    return sessions
+      .filter((s) => s.sessionKey !== mainSessionKey)
+      .slice(0, 5);
+  }, [sessions, mainSessionKey]);
+
+  const mainSession = useMemo(() => {
+    return sessions.find((s) => s.sessionKey === mainSessionKey);
+  }, [sessions, mainSessionKey]);
+
+  return (
+    <motion.div
+      initial={{ width: 0, opacity: 0 }}
+      animate={{ width: 72, opacity: 1 }}
+      exit={{ width: 0, opacity: 0 }}
+      transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+      className="h-full bg-[#f9f9f9] border-r border-[var(--fc-border-gray)] flex flex-col items-center py-4 overflow-hidden"
+    >
+      {/* Toggle Button */}
+      <Tooltip content="Expand sidebar (⌘K)" position="right">
+        <button
+          onClick={onToggle}
+          className="p-2.5 mb-4 hover:bg-[var(--fc-subtle-gray)] rounded-xl transition-all duration-200 group"
+          aria-label="Expand sidebar"
+        >
+          <PanelLeft size={20} className="text-[var(--fc-body-gray)] group-hover:text-[var(--fc-black)] transition-colors" />
+        </button>
+      </Tooltip>
+
+      {/* New Chat Button */}
+      <Tooltip content="New chat" position="right">
+        <button
+          onClick={onNewSession}
+          className="w-11 h-11 mb-4 flex items-center justify-center bg-[var(--fc-black)] text-white rounded-xl hover:bg-[var(--fc-charcoal)] transition-all shadow-md hover:shadow-lg"
+          aria-label="New chat"
+        >
+          <Plus size={20} />
+        </button>
+      </Tooltip>
+
+      <div className="w-8 h-px bg-[var(--fc-border-gray)] my-2" />
+
+      {/* Main Session */}
+      {mainSession && (
+        <Tooltip content={getSessionTitle(mainSession)} position="right">
+          <button
+            onClick={() => onSelectSession(mainSession.sessionKey)}
+            className={`relative w-11 h-11 mb-2 flex items-center justify-center rounded-xl transition-all duration-200 ${currentSessionKey === mainSession.sessionKey
+                ? 'bg-[var(--fc-black)] text-white shadow-md'
+                : 'hover:bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)]'
+              }`}
+            aria-label={getSessionTitle(mainSession)}
+            aria-current={currentSessionKey === mainSession.sessionKey ? 'page' : undefined}
+          >
+            <Pin size={18} />
+            {(mainSession.unreadCount || 0) > 0 && currentSessionKey !== mainSession.sessionKey && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-[var(--fc-action-red)] text-white text-[10px] font-bold rounded-full shadow-sm">
+                {(mainSession.unreadCount || 0) > 99 ? '99+' : mainSession.unreadCount}
+              </span>
+            )}
+          </button>
+        </Tooltip>
+      )}
+
+      {/* Recent Sessions */}
+      <div className="flex-1 overflow-y-auto w-full px-2.5 space-y-2 scrollbar-thin">
+        {recentSessions.map((session) => (
+          <Tooltip key={session.sessionKey} content={getSessionTitle(session)} position="right">
+            <button
+              onClick={() => onSelectSession(session.sessionKey)}
+              className={`relative w-full aspect-square flex items-center justify-center rounded-xl transition-all duration-200 ${currentSessionKey === session.sessionKey
+                  ? 'bg-[var(--fc-black)] text-white shadow-md'
+                  : 'hover:bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)]'
+                }`}
+              aria-label={getSessionTitle(session)}
+              aria-current={currentSessionKey === session.sessionKey ? 'page' : undefined}
+            >
+              <MessageSquare size={18} />
+              {(session.unreadCount || 0) > 0 && currentSessionKey !== session.sessionKey && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-[var(--fc-action-red)] text-white text-[10px] font-bold rounded-full shadow-sm">
+                  {(session.unreadCount || 0) > 99 ? '99+' : session.unreadCount}
+                </span>
+              )}
+            </button>
+          </Tooltip>
+        ))}
+      </div>
+    </motion.div>
+  );
+});
 
 export const ChatSidebar = memo(function ChatSidebar({
   sessions,
@@ -50,129 +365,277 @@ export const ChatSidebar = memo(function ChatSidebar({
   onDeleteSession,
   onToggle,
 }: ChatSidebarProps) {
+  const [isIconRail, setIsIconRail] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<SessionEntry | null>(null);
+
+  const handleDeleteClick = useCallback((session: SessionEntry) => {
+    setSessionToDelete(session);
+  }, []);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (sessionToDelete) {
+      onDeleteSession(sessionToDelete.sessionKey);
+      setSessionToDelete(null);
+    }
+  }, [sessionToDelete, onDeleteSession]);
+
+  const handleCancelDelete = useCallback(() => {
+    setSessionToDelete(null);
+  }, []);
+
   const { mainSession, otherSessions } = useMemo(() => {
     const main = sessions.find((s) => s.sessionKey === mainSessionKey);
     const others = sessions.filter((s) => s.sessionKey !== mainSessionKey);
     return { mainSession: main, otherSessions: others };
   }, [sessions, mainSessionKey]);
 
+  const groupedSessions = useMemo(() => groupSessionsByDate(otherSessions), [otherSessions]);
+
+  // Keyboard shortcut handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ⌘K or Ctrl+K to toggle sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        onToggle();
+      }
+      // Escape to close sidebar
+      if (e.key === 'Escape' && isOpen) {
+        onToggle();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onToggle]);
+
+  // Handle responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024 && window.innerWidth >= 768) {
+        setIsIconRail(true);
+      } else if (window.innerWidth < 768) {
+        setIsIconRail(false);
+      } else {
+        setIsIconRail(false);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const renderSession = (session: SessionEntry, isPinned: boolean) => {
     const isActive = session.sessionKey === currentSessionKey;
+    const unreadCount = session.unreadCount || 0;
     return (
       <motion.div
         key={session.sessionKey}
-        initial={{ opacity: 0, x: -5 }}
+        initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}
-        className="group relative px-2"
+        exit={{ opacity: 0, x: -10 }}
+        transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+        className="group relative"
       >
         <button
           onClick={() => onSelectSession(session.sessionKey)}
-          className={`w-full flex items-start gap-3 px-3 py-3 rounded-lg text-left transition-all duration-200 ${isActive
-            ? 'bg-[var(--fc-subtle-gray)]'
-            : 'hover:bg-[var(--fc-off-white)]'
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ease-out ${isActive
+              ? 'bg-[var(--fc-black)] text-white shadow-md'
+              : 'text-[var(--fc-dark-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)]'
             }`}
+          aria-label={getSessionTitle(session)}
+          aria-current={isActive ? 'page' : undefined}
         >
-          <div className={`mt-0.5 flex-shrink-0 transition-colors ${isActive ? 'text-[var(--fc-black)]' : 'text-[var(--fc-light-gray)] group-hover:text-[var(--fc-body-gray)]'}`}>
-            {isPinned ? <Pin size={16} /> : <MessageSquare size={16} />}
+          <div
+            className={`flex-shrink-0 transition-colors duration-150 ${isActive ? 'text-white' : 'text-[var(--fc-body-gray)] group-hover:text-[var(--fc-dark-gray)]'
+              }`}
+          >
+            {isPinned ? <Pin size={15} /> : <MessageSquare size={15} />}
           </div>
 
           <div className="flex-1 min-w-0">
-            <p
-              className={`text-[13px] truncate transition-colors ${isActive ? 'font-semibold text-[var(--fc-black)]' : 'font-medium text-[var(--fc-body-gray)] group-hover:text-[var(--fc-black)]'
+            <div className="flex items-center gap-2">
+              <p
+                className={`text-[13px] truncate font-medium transition-colors duration-150 ${isActive ? 'text-white' : 'text-[var(--fc-black)]'
+                  } ${unreadCount > 0 && !isActive ? 'font-semibold' : ''}`}
+              >
+                {getSessionTitle(session)}
+              </p>
+              {unreadCount > 0 && !isActive && (
+                <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1.5 flex items-center justify-center bg-[var(--fc-action-red)] text-white text-[10px] font-bold rounded-full shadow-sm">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </div>
+            <div
+              className={`flex items-center gap-1 text-[11px] mt-0.5 transition-colors duration-150 ${isActive ? 'text-white/70' : 'text-[var(--fc-light-gray)]'
                 }`}
             >
-              {getSessionTitle(session)}
-            </p>
-            <p className="text-[11px] text-[var(--fc-light-gray)] mt-1 truncate group-hover:text-[var(--fc-body-gray)] transition-colors">
-              {formatSessionDate(session.updatedAt)}
-            </p>
+              <Clock size={10} />
+              <span>{formatSessionDate(session.updatedAt)}</span>
+            </div>
           </div>
-
-          {isActive && (
-            <motion.div
-              layoutId="active-indicator"
-              className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 bg-[var(--fc-action-red)] rounded-r-sm"
-            />
-          )}
         </button>
+
+        {/* Delete button - Enhanced hover state */}
         {!isPinned && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteSession(session.sessionKey);
-            }}
-            className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-gray-200 rounded-md transition-all text-[var(--fc-light-gray)] hover:text-red-600"
-            aria-label="Delete session"
-          >
-            <Trash2 size={14} />
-          </button>
+          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+            <Tooltip content="Delete conversation" position="left" delay={200}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClick(session);
+                }}
+                className={`p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 ${isActive
+                    ? 'text-white/60 hover:text-white hover:bg-white/10'
+                    : 'text-[var(--fc-light-gray)] hover:text-[var(--fc-action-red)] hover:bg-red-50'
+                  }`}
+                aria-label="Delete conversation"
+              >
+                <Trash2 size={14} />
+              </button>
+            </Tooltip>
+          </div>
         )}
       </motion.div>
     );
   };
 
+  // Icon Rail Mode (for tablet-sized screens)
+  if (!isOpen && isIconRail) {
+    return (
+      <IconRail
+        sessions={sessions}
+        currentSessionKey={currentSessionKey}
+        mainSessionKey={mainSessionKey}
+        onNewSession={onNewSession}
+        onSelectSession={onSelectSession}
+        onToggle={onToggle}
+      />
+    );
+  }
+
   return (
     <>
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isOpen && (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 280, opacity: 1 }}
+            animate={{ width: 300, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            className="h-full bg-white border-r border-[var(--fc-border-gray)] flex flex-col overflow-hidden shadow-[var(--shadow-sm)]"
+            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+            className="h-full bg-[#f9f9f9] border-r border-[var(--fc-border-gray)] flex flex-col overflow-hidden"
           >
-            <div className="p-4 border-b border-[var(--fc-border-gray)] flex items-center justify-between">
-              <h2 className="text-base font-semibold text-[var(--fc-black)]">Chats</h2>
-              <button
-                onClick={onToggle}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                aria-label="Close sidebar"
-              >
-                <PanelLeftClose size={18} className="text-[var(--fc-body-gray)]" />
-              </button>
+            {/* Header */}
+            <div className="sticky top-0 z-10 px-5 py-5 flex items-center justify-between bg-[#f9f9f9]/80 backdrop-blur-md border-b border-transparent transition-colors duration-200">
+              <h2 className="text-[18px] font-bold tracking-tight text-[var(--fc-black)] font-[family-name:var(--font-manrope)]">
+                Chat History
+              </h2>
+              <Tooltip content="Close sidebar (⌘K)" position="bottom" delay={200}>
+                <button
+                  onClick={onToggle}
+                  className="p-1.5 hover:bg-[var(--fc-subtle-gray)] rounded-lg transition-all duration-200 focus:outline-none group opacity-60 hover:opacity-100"
+                  aria-label="Close sidebar"
+                >
+                  <PanelLeftClose size={16} className="text-[var(--fc-black)]" />
+                </button>
+              </Tooltip>
             </div>
 
-            <div className="p-3">
-              <button
+            {/* New Chat Button */}
+            <div className="px-5 pb-4 pt-3">
+              <motion.button
                 onClick={onNewSession}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[var(--fc-black)] text-white rounded-lg hover:bg-[var(--fc-charcoal)] transition-all font-medium text-[14px] shadow-[var(--shadow-sm)] active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[var(--fc-black)] text-white rounded-xl hover:bg-[var(--fc-charcoal)] transition-all duration-200 font-medium text-[13px] shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--fc-black)] focus:ring-offset-2"
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
               >
-                <Plus size={18} />
+                <Plus size={16} />
                 New Chat
-              </button>
+              </motion.button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-2 pb-4">
+            {/* Sessions List - Enhanced scrollable area with custom scrollbar */}
+            <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-5 scrollbar-thin scrollbar-thumb-[var(--fc-border-gray)] scrollbar-track-transparent hover:scrollbar-thumb-[var(--fc-light-gray)]">
               {sessions.length === 0 ? (
-                <p className="text-center text-sm text-[var(--fc-body-gray)] py-8">
-                  No conversations yet
-                </p>
+                <EmptyState onNewSession={onNewSession} />
               ) : (
-                <div className="space-y-1">
-                  {mainSession && renderSession(mainSession, true)}
-
-                  {otherSessions.length > 0 && mainSession && (
-                    <div className="border-t border-[var(--fc-border-gray)] my-2" />
+                <>
+                  {/* Pinned/Main Session */}
+                  {mainSession && (
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold text-[var(--fc-body-gray)] uppercase tracking-wider px-3 mb-2">
+                        Pinned
+                      </p>
+                      {renderSession(mainSession, true)}
+                    </div>
                   )}
 
-                  {otherSessions.map((session) => renderSession(session, false))}
-                </div>
+                  {/* Grouped Sessions */}
+                  {groupedSessions.map((group) => (
+                    <div key={group.label} className="space-y-1">
+                      <p className="text-[11px] font-semibold text-[var(--fc-body-gray)] uppercase tracking-wider px-3 mb-2">
+                        {group.label}
+                      </p>
+                      <AnimatePresence mode="popLayout">
+                        {group.sessions.map((session) => renderSession(session, false))}
+                      </AnimatePresence>
+                    </div>
+                  ))}
+                </>
               )}
+            </div>
+
+            {/* Footer - Enhanced with keyboard shortcut hint */}
+            <div className="px-4 py-3 border-t border-[var(--fc-border-gray)] bg-[var(--fc-subtle-gray)]/50">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-[var(--fc-light-gray)]">
+                  <kbd className="px-1.5 py-0.5 bg-white border border-[var(--fc-border-gray)] rounded text-[9px] font-mono text-[var(--fc-body-gray)]">
+                    ⌘K
+                  </kbd>
+                  {' '}to toggle
+                </p>
+                <p className="text-[10px] text-[var(--fc-light-gray)]">
+                  {sessions.length} chat{sessions.length !== 1 ? 's' : ''}
+                </p>
+              </div>
             </div>
           </motion.aside>
         )}
       </AnimatePresence>
 
-      {!isOpen && (
-        <button
-          onClick={onToggle}
-          className="fixed left-4 top-20 z-10 p-2 bg-white border border-[var(--fc-border-gray)] rounded-xl shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-md)] transition-shadow"
-          aria-label="Open sidebar"
-        >
-          <PanelLeft size={20} className="text-[var(--fc-body-gray)]" />
-        </button>
+      {/* Toggle button when closed - Enhanced with tooltip */}
+      {!isOpen && !isIconRail && (
+        <Tooltip content="Open sidebar (⌘K)" position="right">
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            onClick={onToggle}
+            className="fixed left-4 top-20 z-50 p-2.5 bg-white border border-[var(--fc-border-gray)] rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--fc-border-gray)]"
+            aria-label="Open sidebar"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <PanelLeft size={20} className="text-[var(--fc-body-gray)]" />
+          </motion.button>
+        </Tooltip>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AnimatePresence>
+        {sessionToDelete && (
+          <ConfirmDialog
+            isOpen={!!sessionToDelete}
+            title="Delete conversation?"
+            message={`Are you sure you want to delete "${getSessionTitle(sessionToDelete)}"? This action cannot be undone.`}
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            onConfirm={handleConfirmDelete}
+            onCancel={handleCancelDelete}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 });
