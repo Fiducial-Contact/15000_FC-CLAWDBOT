@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { motion } from 'motion/react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -12,7 +13,7 @@ interface CapabilityCardProps {
   index?: number;
 }
 
-export function CapabilityCard({
+export const CapabilityCard = memo(function CapabilityCard({
   icon: Icon,
   title,
   description,
@@ -23,11 +24,11 @@ export function CapabilityCard({
   return (
     <motion.button
       onClick={onClick}
-      className="flex flex-col items-center gap-2 p-4 bg-white border border-[var(--fc-border-gray)] rounded-xl text-center hover:border-[var(--fc-action-red)] hover:shadow-md transition-all group cursor-pointer"
+      className="flex flex-col items-center gap-2 p-4 bg-white border border-[var(--fc-border-gray)] rounded-2xl text-center hover:border-[var(--fc-action-red)] shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-md)] transition-all group cursor-pointer"
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 + index * 0.05, duration: 0.3 }}
-      whileHover={{ scale: 1.03, y: -2 }}
+      transition={{ delay: 0.12 + index * 0.06, duration: 0.32 }}
+      whileHover={{ scale: 1.02, y: -2 }}
       whileTap={{ scale: 0.98 }}
     >
       <div
@@ -42,4 +43,4 @@ export function CapabilityCard({
       <span className="text-xs text-[var(--fc-body-gray)]">{description}</span>
     </motion.button>
   );
-}
+});

@@ -86,7 +86,7 @@ ssh root@46.224.225.164 "clawdbot pairing approve msteams <code>"
 | 项目 | 值 |
 |------|-----|
 | IP | `46.224.225.164` |
-| SSH | `ssh root@46.224.225.164` |
+| SSH | `ssh root@46.224.225.164` (需要 1Password SSH Agent 中的密钥) |
 | Tailscale | `clawdbot.tail297e45.ts.net` |
 | Teams Webhook | `https://clawdbot.tail297e45.ts.net/api/messages` |
 | Gateway Port | 18789 (loopback) |

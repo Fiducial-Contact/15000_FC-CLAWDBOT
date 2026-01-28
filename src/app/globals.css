@@ -1,102 +1,304 @@
 @import "tailwindcss";
 
 :root {
-  /* Fiducial Brand Colors */
+  /* 
+   * Premium Minimalist Palette 
+   * Neutral foundation with strict red accents
+   */
+
+  /* Brand Accents - STRICT USAGE */
   --fc-red: #be1e2c;
-  --fc-action-red: #e20613;
-  --fc-dark-red: #cd2e26;
-  --fc-black: #1a1b1f;
-  --fc-dark-gray: #222;
-  --fc-body-gray: #5a5a5a;
-  --fc-light-gray: #868686;
-  --fc-off-white: #f7f7fa;
+  /* Base Brand Color */
+  --fc-action-red: #cc1f2d;
+  /* Primary Action (slightly brighter than base) */
+  --fc-dark-red: #a31723;
+  /* Hover states */
+
+  /* Neutrals - The Foundation */
+  --fc-black: #111111;
+  /* Primary Text, Headings */
+  --fc-charcoal: #1f1f1f;
+  /* User Bubbles, Dark Cards */
+  --fc-dark-gray: #444444;
+  /* Secondary Icons */
+  --fc-body-gray: #666666;
+  /* Body Text */
+  --fc-light-gray: #999999;
+  /* Placeholders, Tertiary */
+  --fc-border-gray: #e5e5e5;
+  /* Subtle Borders */
+  --fc-subtle-gray: #f4f4f5;
+  /* Backgrounds, Inputs */
+  --fc-off-white: #fafafa;
+  /* App Background */
   --fc-white: #ffffff;
-  --fc-border-gray: #e4e4e4;
-  --fc-subtle-gray: #f5f5f5;
-  
-  /* Semantic mapping */
+  /* Card Backgrounds */
+
+  /* Semantic Mapping */
   --background: var(--fc-off-white);
   --foreground: var(--fc-black);
-  --accent: var(--fc-action-red);
-  --accent-hover: var(--fc-dark-red);
-  --muted: var(--fc-body-gray);
-  --border: var(--fc-border-gray);
   --card: var(--fc-white);
+  --card-foreground: var(--fc-black);
+  --popover: var(--fc-white);
+  --popover-foreground: var(--fc-black);
+
+  --primary: var(--fc-black);
+  --primary-foreground: var(--fc-white);
+
+  --secondary: var(--fc-subtle-gray);
+  --secondary-foreground: var(--fc-black);
+
+  --muted: var(--fc-subtle-gray);
+  --muted-foreground: var(--fc-body-gray);
+
+  --accent: var(--fc-subtle-gray);
+  --accent-foreground: var(--fc-black);
+
+  --destructive: var(--fc-action-red);
+  --destructive-foreground: var(--fc-white);
+
+  --border: var(--fc-border-gray);
+  --input: var(--fc-border-gray);
+  --ring: var(--fc-border-gray);
+
+  /* Premium Shadows (Diffuse & Soft) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+  --shadow-float: 0 12px 24px -8px rgba(0, 0, 0, 0.08);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
   --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
   --color-card: var(--card);
-  
-  /* Fiducial Colors */
+
+  /* Fiducial Legacy & New Colors */
   --color-fc-red: var(--fc-red);
   --color-fc-action-red: var(--fc-action-red);
   --color-fc-dark-red: var(--fc-dark-red);
   --color-fc-black: var(--fc-black);
+  --color-fc-charcoal: var(--fc-charcoal);
   --color-fc-body-gray: var(--fc-body-gray);
   --color-fc-off-white: var(--fc-off-white);
+  --color-fc-subtle-gray: var(--fc-subtle-gray);
   --color-fc-white: var(--fc-white);
   --color-fc-border-gray: var(--fc-border-gray);
-  
+
   --font-heading: var(--font-manrope), 'Manrope', sans-serif;
   --font-body: var(--font-inter), 'Inter', sans-serif;
   --font-ui: var(--font-montserrat), 'Montserrat', sans-serif;
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-float: var(--shadow-float);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 1.75;
+  font-size: 15px;
+  /* Slightly smaller, more refined base size */
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-heading);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--fc-black);
-  letter-spacing: -0.022rem;
-  line-height: 140%;
+  letter-spacing: -0.025em;
+  /* Tighter tracking for headings */
+  line-height: 1.25;
 }
 
-h1 { font-size: 3rem; }
-h2 { font-size: 2.5rem; }
-h3 { font-size: 2rem; }
-h4 { font-size: 1.8rem; }
-h5 { font-size: 1.5rem; }
+h1 {
+  font-size: 2.5rem;
+}
+
+h2 {
+  font-size: 2rem;
+}
+
+h3 {
+  font-size: 1.75rem;
+}
+
+h4 {
+  font-size: 1.5rem;
+}
+
+h5 {
+  font-size: 1.25rem;
+}
 
 p {
   color: var(--fc-body-gray);
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling - Minimalist */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--fc-off-white);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--fc-border-gray);
+  background: #dbdbdb;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--fc-light-gray);
+  background: #bbbbbb;
 }
 
-/* Focus styles */
+/* Focus styles - Subtle Ring */
 *:focus-visible {
-  outline: 2px solid var(--fc-action-red);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--fc-off-white), 0 0 0 4px var(--fc-action-red);
+  border-radius: 2px;
 }
+
+/* Custom Animations */
+@keyframes breathing-glow {
+  0% {
+    box-shadow: 0 0 0 1px rgba(190, 30, 44, 0.1), 0 0 15px -3px rgba(190, 30, 44, 0.2);
+    border-color: rgba(190, 30, 44, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 0 1px rgba(190, 30, 44, 0.2), 0 0 25px -3px rgba(190, 30, 44, 0.4);
+    border-color: rgba(190, 30, 44, 0.5);
+  }
+
+  100% {
+    box-shadow: 0 0 0 1px rgba(190, 30, 44, 0.1), 0 0 15px -3px rgba(190, 30, 44, 0.2);
+    border-color: rgba(190, 30, 44, 0.3);
+  }
+}
+
+.animate-breathing-glow {
+  animation: breathing-glow 3s infinite ease-in-out;
+}
+
+/* Markdown Content Styles */
+.markdown-content {
+  @apply text-[var(--fc-black)];
+}
+
+.markdown-content > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-content > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Syntax Highlighting - VS Code Dark Theme */
+.hljs {
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-name,
+.hljs-tag {
+  color: #569cd6;
+}
+
+.hljs-string,
+.hljs-title,
+.hljs-section,
+.hljs-attribute,
+.hljs-literal,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-addition {
+  color: #ce9178;
+}
+
+.hljs-deletion,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-meta {
+  color: #d16969;
+}
+
+.hljs-doctag {
+  color: #608b4e;
+}
+
+.hljs-attr {
+  color: #9cdcfe;
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-subst,
+.hljs-quote,
+.hljs-fragment,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-link {
+  color: #dcdcaa;
+}
+
+.hljs-comment,
+.hljs-formula {
+  color: #6a9955;
+  font-style: italic;
+}
+
+.hljs-number {
+  color: #b5cea8;
+}
+
+.hljs-regexp {
+  color: #d16969;
+}
+
+.hljs-function {
+  color: #dcdcaa;
+}
+
+.hljs-params {
+  color: #9cdcfe;
+}
+
+.hljs-class .hljs-title,
+.hljs-title.class_ {
+  color: #4ec9b0;
+}
+
+.hljs-property {
+  color: #9cdcfe;
+}
+
+.hljs-punctuation {
+  color: #d4d4d4;
+}
+

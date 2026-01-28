@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Sparkles, Mic, Globe, Paperclip, Send } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { Sparkles, Mic, Globe, Paperclip, Send, Square } from 'lucide-react';
+import { motion } from 'motion/react';
 
 const PLACEHOLDERS = [
   'How do I export 4K ProRes from Premiere?',
@@ -14,10 +14,12 @@ const PLACEHOLDERS = [
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  onAbort?: () => void;
   disabled?: boolean;
+  isLoading?: boolean;
 }
 
-export function ChatInput({ onSend, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputProps) {
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [showPlaceholder, setShowPlaceholder] = useState(true);
   const [isActive, setIsActive] = useState(false);
@@ -25,6 +27,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [deepSearchActive, setDeepSearchActive] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isActive || inputValue) return;
@@ -35,7 +38,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDERS.length);
         setShowPlaceholder(true);
       }, 400);
-    }, 3000);
+    }, 3500);
 
     return () => clearInterval(interval);
   }, [isActive, inputValue]);
@@ -54,7 +57,10 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [inputValue]);
 
-  const handleActivate = () => setIsActive(true);
+  const handleActivate = () => {
+    setIsActive(true);
+    inputRef.current?.focus();
+  };
 
   const handleSubmit = () => {
     if (inputValue.trim() && !disabled) {
@@ -71,215 +77,113 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     }
   };
 
-  const containerVariants = {
-    collapsed: {
-      height: 68,
-      boxShadow: '0 2px 8px 0 rgba(0,0,0,0.08)',
-      transition: { type: 'spring' as const, stiffness: 120, damping: 18 },
-    },
-    expanded: {
-      height: 128,
-      boxShadow: '0 8px 32px 0 rgba(0,0,0,0.16)',
-      transition: { type: 'spring' as const, stiffness: 120, damping: 18 },
-    },
-  };
-
-  const placeholderContainerVariants = {
-    initial: {},
-    animate: { transition: { staggerChildren: 0.025 } },
-    exit: { transition: { staggerChildren: 0.015, staggerDirection: -1 } },
-  };
-
-  const letterVariants = {
-    initial: {
-      opacity: 0,
-      filter: 'blur(12px)',
-      y: 10,
-    },
-    animate: {
-      opacity: 1,
-      filter: 'blur(0px)',
-      y: 0,
-      transition: {
-        opacity: { duration: 0.25 },
-        filter: { duration: 0.4 },
-        y: { type: 'spring' as const, stiffness: 80, damping: 20 },
-      },
-    },
-    exit: {
-      opacity: 0,
-      filter: 'blur(12px)',
-      y: -10,
-      transition: {
-        opacity: { duration: 0.2 },
-        filter: { duration: 0.3 },
-        y: { type: 'spring' as const, stiffness: 80, damping: 20 },
-      },
-    },
-  };
-
   return (
-    <div className="w-full flex justify-center items-center p-4 bg-[var(--fc-off-white)]">
+    <div className="w-full flex justify-center items-center px-6 pb-6 pt-2 bg-transparent pointer-events-none">
       <motion.div
         ref={wrapperRef}
-        className="w-full max-w-3xl"
-        variants={containerVariants}
-        animate={isActive || inputValue ? 'expanded' : 'collapsed'}
-        initial="collapsed"
-        style={{ overflow: 'hidden', borderRadius: 32, background: '#fff' }}
+        className={`pointer-events-auto w-full max-w-3xl bg-white border flex flex-col items-stretch overflow-hidden transition-all duration-300 relative ${isActive
+            ? 'animate-breathing-glow border-[var(--fc-action-red)]/30'
+            : 'border-[var(--fc-border-gray)] shadow-[var(--shadow-float)] hover:shadow-[var(--shadow-lg)] hover:border-[var(--fc-light-gray)]'
+          }`}
+        initial={{ borderRadius: 16 }}
+        animate={{ borderRadius: 16 }}
         onClick={handleActivate}
       >
-        <div className="flex flex-col items-stretch w-full h-full">
-          <div className="flex items-center gap-2 p-3 rounded-full bg-white max-w-3xl w-full">
-            <button
-              className="p-3 rounded-full hover:bg-gray-100 transition text-[var(--fc-body-gray)]"
-              title="Attach file"
-              type="button"
-              tabIndex={-1}
-            >
-              <Paperclip size={20} />
-            </button>
-
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={disabled}
-                className="flex-1 border-0 outline-0 rounded-md py-2 text-base bg-transparent w-full font-normal text-[var(--fc-black)] disabled:opacity-50"
-                style={{ position: 'relative', zIndex: 1 }}
-                onFocus={handleActivate}
-              />
-              <div className="absolute left-0 top-0 w-full h-full pointer-events-none flex items-center px-3 py-2">
-                <AnimatePresence mode="wait">
-                  {showPlaceholder && !isActive && !inputValue && (
-                    <motion.span
-                      key={placeholderIndex}
-                      className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-400 select-none pointer-events-none"
-                      style={{
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        zIndex: 0,
-                      }}
-                      variants={placeholderContainerVariants}
-                      initial="initial"
-                      animate="animate"
-                      exit="exit"
-                    >
-                      {PLACEHOLDERS[placeholderIndex].split('').map((char, i) => (
-                        <motion.span
-                          key={i}
-                          variants={letterVariants}
-                          style={{ display: 'inline-block' }}
-                        >
-                          {char === ' ' ? '\u00A0' : char}
-                        </motion.span>
-                      ))}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-
-            <button
-              className="p-3 rounded-full hover:bg-gray-100 transition text-[var(--fc-body-gray)]"
-              title="Voice input"
-              type="button"
-              tabIndex={-1}
-            >
-              <Mic size={20} />
-            </button>
-            <button
-              className="flex items-center gap-1 bg-[var(--fc-action-red)] hover:bg-[var(--fc-dark-red)] disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-3 rounded-full font-medium justify-center transition-colors"
-              title="Send"
-              type="button"
-              tabIndex={-1}
-              disabled={!inputValue.trim() || disabled}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSubmit();
-              }}
-            >
-              <Send size={18} />
-            </button>
+        <div className="flex flex-col w-full">
+          {/* Main Input Text Area */}
+          <div className="relative w-full px-4 pt-4 pb-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={disabled}
+              placeholder={showPlaceholder && !isActive ? PLACEHOLDERS[placeholderIndex] : "Ask anything..."}
+              className="w-full text-[15px] bg-transparent border-none outline-none focus-visible:shadow-none text-[var(--fc-black)] placeholder:text-[var(--fc-light-gray)] font-medium leading-relaxed"
+              style={{ minHeight: '24px' }}
+              onFocus={handleActivate}
+            />
           </div>
 
-          <motion.div
-            className="w-full flex justify-start px-4 items-center text-sm"
-            variants={{
-              hidden: {
-                opacity: 0,
-                y: 20,
-                pointerEvents: 'none' as const,
-                transition: { duration: 0.25 },
-              },
-              visible: {
-                opacity: 1,
-                y: 0,
-                pointerEvents: 'auto' as const,
-                transition: { duration: 0.35, delay: 0.08 },
-              },
-            }}
-            initial="hidden"
-            animate={isActive || inputValue ? 'visible' : 'hidden'}
-            style={{ marginTop: 8 }}
-          >
-            <div className="flex gap-3 items-center">
+          {/* Toolbar Row */}
+          <div className="flex items-center justify-between px-3 pb-3 pt-1">
+            {/* Left Tools */}
+            <div className="flex items-center gap-1">
               <button
-                className={`flex items-center gap-1 px-4 py-2 rounded-full transition-all font-medium group ${
-                  thinkActive
-                    ? 'bg-[var(--fc-action-red)]/10 outline outline-[var(--fc-action-red)]/60 text-[var(--fc-black)]'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-                title="Think"
+                className={`p-2 rounded-lg transition-colors duration-200 group ${isActive || inputValue ? 'text-[var(--fc-body-gray)] hover:bg-[var(--fc-off-white)] hover:text-[var(--fc-black)]' : 'text-[var(--fc-light-gray)]'
+                  }`}
+                title="Attach file"
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setThinkActive((a) => !a);
-                }}
+                tabIndex={-1}
               >
-                <Sparkles
-                  className={`transition-all ${thinkActive ? 'text-[var(--fc-action-red)]' : 'group-hover:text-[var(--fc-action-red)]'}`}
-                  size={18}
-                />
-                Think
+                <div className="relative">
+                  <Paperclip size={18} strokeWidth={2} />
+                </div>
               </button>
 
-              <motion.button
-                className={`flex items-center px-4 gap-1 py-2 rounded-full transition font-medium whitespace-nowrap overflow-hidden justify-start ${
-                  deepSearchActive
-                    ? 'bg-[var(--fc-action-red)]/10 outline outline-[var(--fc-action-red)]/60 text-[var(--fc-black)]'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-                title="Deep Search"
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDeepSearchActive((a) => !a);
-                }}
-                initial={false}
-                animate={{
-                  width: deepSearchActive ? 140 : 44,
-                  paddingLeft: deepSearchActive ? 16 : 12,
-                }}
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200 border ${thinkActive
+                    ? 'bg-red-50 text-[var(--fc-action-red)] border-red-100'
+                    : 'bg-transparent text-[var(--fc-body-gray)] border-transparent hover:bg-[var(--fc-off-white)]'
+                  }`}
+                onClick={(e) => { e.stopPropagation(); setThinkActive(!thinkActive); }}
               >
-                <div className="flex-shrink-0">
-                  <Globe size={18} className={deepSearchActive ? 'text-[var(--fc-action-red)]' : ''} />
-                </div>
-                <motion.span
-                  className="pb-[2px]"
-                  initial={false}
-                  animate={{
-                    opacity: deepSearchActive ? 1 : 0,
+                <Sparkles size={13} className={thinkActive ? 'fill-current' : ''} />
+                <span>Think</span>
+              </button>
+
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200 border ${deepSearchActive
+                    ? 'bg-blue-50 text-blue-600 border-blue-100'
+                    : 'bg-transparent text-[var(--fc-body-gray)] border-transparent hover:bg-[var(--fc-off-white)]'
+                  }`}
+                onClick={(e) => { e.stopPropagation(); setDeepSearchActive(!deepSearchActive); }}
+              >
+                <Globe size={13} />
+                <span>Search</span>
+              </button>
+            </div>
+
+            {/* Right Tools */}
+            <div className="flex items-center gap-2">
+              {inputValue.length === 0 && (
+                <button
+                  className="p-2 rounded-lg text-[var(--fc-light-gray)] hover:text-[var(--fc-black)] hover:bg-[var(--fc-off-white)] transition-colors"
+                  type="button"
+                >
+                  <Mic size={18} />
+                </button>
+              )}
+
+              {isLoading ? (
+                <button
+                  className="flex items-center justify-center p-2 rounded-lg bg-[var(--fc-action-red)] text-white shadow-md transition-all duration-300 active:scale-95 hover:bg-[var(--fc-dark-red)]"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAbort?.();
+                  }}
+                  title="Stop generating"
+                >
+                  <Square size={14} className="fill-current" />
+                </button>
+              ) : (
+                <button
+                  className={`flex items-center justify-center p-2 rounded-lg transition-all duration-300 ${inputValue.trim()
+                      ? 'bg-[var(--fc-black)] text-white shadow-md active:scale-95'
+                      : 'bg-[var(--fc-off-white)] text-[var(--fc-light-gray)] cursor-not-allowed'
+                    }`}
+                  disabled={!inputValue.trim() || disabled}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSubmit();
                   }}
                 >
-                  Deep Search
-                </motion.span>
-              </motion.button>
+                  <Send size={16} className={inputValue.trim() ? 'ml-0.5' : ''} />
+                </button>
+              )}
             </div>
-          </motion.div>
+          </div>
         </div>
       </motion.div>
     </div>

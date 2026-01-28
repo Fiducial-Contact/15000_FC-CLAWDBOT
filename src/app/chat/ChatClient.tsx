@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -139,11 +139,16 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const router = useRouter();
   const supabase = createClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isAutoScrollRef = useRef(true);
+  const lastMessageCountRef = useRef(0);
+  const lastStreamLengthRef = useRef(0);
 
   const {
     messages,
     sessions,
     currentSessionKey,
+    mainSessionKey,
     isConnected,
     isLoading,
     error,
@@ -154,24 +159,45 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     switchSession,
     deleteSession,
     toggleSidebar,
+    abortChat,
   } = useGateway({ userId });
 
   const allSuggestions = useMemo(() => {
     return CAPABILITY_CATEGORIES.flatMap((cat) => cat.suggestions);
   }, []);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+    isAutoScrollRef.current = true;
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const threshold = 80;
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    isAutoScrollRef.current = distanceFromBottom < threshold;
+  }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingContent]);
+    const hasNewMessage = messages.length > lastMessageCountRef.current;
+    const streamLength = streamingContent.length;
+    const streamingGrowing = streamLength > lastStreamLengthRef.current;
+
+    if (hasNewMessage) {
+      scrollToBottom('smooth');
+    } else if (streamingGrowing && isAutoScrollRef.current) {
+      scrollToBottom('auto');
+    }
+
+    lastMessageCountRef.current = messages.length;
+    lastStreamLengthRef.current = streamLength;
+  }, [messages.length, streamingContent, scrollToBottom]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/');
-    router.refresh();
   };
 
   const handleSuggestionClick = (text: string) => {
@@ -193,6 +219,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
         <ChatSidebar
           sessions={sessions}
           currentSessionKey={currentSessionKey}
+          mainSessionKey={mainSessionKey}
           isOpen={isSidebarOpen}
           onNewSession={createNewSession}
           onSelectSession={switchSession}
@@ -215,20 +242,24 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
             )}
           </AnimatePresence>
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-4xl mx-auto px-4 py-6">
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-y-auto"
+            onScroll={handleScroll}
+          >
+            <div className="max-w-3xl mx-auto px-4 py-4 transition-all duration-300">
               {isEmpty ? (
                 <motion.div
-                  className="text-center py-8"
+                  className="text-center py-10"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4 }}
+                  transition={{ duration: 0.5 }}
                 >
                   <motion.div
                     className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--fc-red)] to-[var(--fc-action-red)] mx-auto mb-5 flex items-center justify-center shadow-lg"
                     initial={{ scale: 0.8, rotate: -10 }}
                     animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+                    transition={{ type: 'spring', stiffness: 160, damping: 14 }}
                   >
                     <Bot size={36} className="text-white" />
                   </motion.div>
@@ -248,7 +279,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                       Here&apos;s what I can help you with:
                     </p>
 
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 max-w-3xl mx-auto">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-3xl mx-auto">
                       {CAPABILITY_CATEGORIES.map((category, index) => (
                         <CapabilityCard
                           key={category.id}
@@ -275,10 +306,10 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                         <motion.button
                           key={i}
                           onClick={() => handleSuggestionClick(suggestion.text)}
-                          className="flex items-center gap-2 px-3 py-2 bg-white border border-[var(--fc-border-gray)] rounded-full text-sm hover:border-[var(--fc-action-red)] hover:shadow-sm transition-all group"
+                          className="flex items-center gap-2 px-3 py-2 bg-white border border-[var(--fc-border-gray)] rounded-full text-sm hover:border-[var(--fc-action-red)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] transition-all group"
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.3 + i * 0.05 }}
+                          transition={{ delay: 0.35 + i * 0.06 }}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                         >
@@ -295,10 +326,10 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
                     <motion.button
                       onClick={handleSurpriseMe}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white rounded-full text-sm font-medium shadow-md hover:shadow-lg transition-shadow"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white rounded-full text-sm font-medium shadow-[var(--shadow-md)] hover:shadow-[var(--shadow-lg)] transition-shadow"
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.6 }}
+                      transition={{ delay: 0.7 }}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
@@ -351,7 +382,12 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
             </div>
           </div>
 
-          <ChatInput onSend={sendMessage} disabled={isLoading || !isConnected} />
+          <ChatInput
+            onSend={sendMessage}
+            onAbort={abortChat}
+            disabled={isLoading || !isConnected}
+            isLoading={isLoading}
+          />
         </main>
       </div>
     </div>

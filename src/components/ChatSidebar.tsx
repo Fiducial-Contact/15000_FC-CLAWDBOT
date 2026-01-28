@@ -1,12 +1,14 @@
 'use client';
 
+import { memo, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, MessageSquare, Trash2, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, PanelLeftClose, PanelLeft, Pin } from 'lucide-react';
 import type { SessionEntry } from '@/lib/gateway/types';
 
 interface ChatSidebarProps {
   sessions: SessionEntry[];
   currentSessionKey: string;
+  mainSessionKey: string;
   isOpen: boolean;
   onNewSession: () => void;
   onSelectSession: (sessionKey: string) => void;
@@ -38,15 +40,77 @@ function formatSessionDate(dateStr?: string): string {
   return date.toLocaleDateString();
 }
 
-export function ChatSidebar({
+export const ChatSidebar = memo(function ChatSidebar({
   sessions,
   currentSessionKey,
+  mainSessionKey,
   isOpen,
   onNewSession,
   onSelectSession,
   onDeleteSession,
   onToggle,
 }: ChatSidebarProps) {
+  const { mainSession, otherSessions } = useMemo(() => {
+    const main = sessions.find((s) => s.sessionKey === mainSessionKey);
+    const others = sessions.filter((s) => s.sessionKey !== mainSessionKey);
+    return { mainSession: main, otherSessions: others };
+  }, [sessions, mainSessionKey]);
+
+  const renderSession = (session: SessionEntry, isPinned: boolean) => {
+    const isActive = session.sessionKey === currentSessionKey;
+    return (
+      <motion.div
+        key={session.sessionKey}
+        initial={{ opacity: 0, x: -5 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="group relative px-2"
+      >
+        <button
+          onClick={() => onSelectSession(session.sessionKey)}
+          className={`w-full flex items-start gap-3 px-3 py-3 rounded-lg text-left transition-all duration-200 ${isActive
+            ? 'bg-[var(--fc-subtle-gray)]'
+            : 'hover:bg-[var(--fc-off-white)]'
+            }`}
+        >
+          <div className={`mt-0.5 flex-shrink-0 transition-colors ${isActive ? 'text-[var(--fc-black)]' : 'text-[var(--fc-light-gray)] group-hover:text-[var(--fc-body-gray)]'}`}>
+            {isPinned ? <Pin size={16} /> : <MessageSquare size={16} />}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <p
+              className={`text-[13px] truncate transition-colors ${isActive ? 'font-semibold text-[var(--fc-black)]' : 'font-medium text-[var(--fc-body-gray)] group-hover:text-[var(--fc-black)]'
+                }`}
+            >
+              {getSessionTitle(session)}
+            </p>
+            <p className="text-[11px] text-[var(--fc-light-gray)] mt-1 truncate group-hover:text-[var(--fc-body-gray)] transition-colors">
+              {formatSessionDate(session.updatedAt)}
+            </p>
+          </div>
+
+          {isActive && (
+            <motion.div
+              layoutId="active-indicator"
+              className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 bg-[var(--fc-action-red)] rounded-r-sm"
+            />
+          )}
+        </button>
+        {!isPinned && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteSession(session.sessionKey);
+            }}
+            className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-gray-200 rounded-md transition-all text-[var(--fc-light-gray)] hover:text-red-600"
+            aria-label="Delete session"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </motion.div>
+    );
+  };
+
   return (
     <>
       <AnimatePresence>
@@ -55,8 +119,8 @@ export function ChatSidebar({
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 280, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="h-full bg-white border-r border-[var(--fc-border-gray)] flex flex-col overflow-hidden"
+            transition={{ duration: 0.22 }}
+            className="h-full bg-white border-r border-[var(--fc-border-gray)] flex flex-col overflow-hidden shadow-[var(--shadow-sm)]"
           >
             <div className="p-4 border-b border-[var(--fc-border-gray)] flex items-center justify-between">
               <h2 className="text-base font-semibold text-[var(--fc-black)]">Chats</h2>
@@ -72,7 +136,7 @@ export function ChatSidebar({
             <div className="p-3">
               <button
                 onClick={onNewSession}
-                className="w-full flex items-center gap-2 px-4 py-2.5 bg-[var(--fc-action-red)] text-white rounded-lg hover:bg-[var(--fc-dark-red)] transition-colors font-medium"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[var(--fc-black)] text-white rounded-lg hover:bg-[var(--fc-charcoal)] transition-all font-medium text-[14px] shadow-[var(--shadow-sm)] active:scale-[0.98]"
               >
                 <Plus size={18} />
                 New Chat
@@ -86,55 +150,13 @@ export function ChatSidebar({
                 </p>
               ) : (
                 <div className="space-y-1">
-                  {sessions.map((session) => {
-                    const isActive = session.sessionKey === currentSessionKey;
-                    return (
-                      <motion.div
-                        key={session.sessionKey}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className="group relative"
-                      >
-                        <button
-                          onClick={() => onSelectSession(session.sessionKey)}
-                          className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
-                            isActive
-                              ? 'bg-red-50 border border-[var(--fc-action-red)]'
-                              : 'hover:bg-gray-50'
-                          }`}
-                        >
-                          <MessageSquare
-                            size={18}
-                            className={`mt-0.5 flex-shrink-0 ${
-                              isActive ? 'text-[var(--fc-action-red)]' : 'text-[var(--fc-body-gray)]'
-                            }`}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={`text-sm font-medium truncate ${
-                                isActive ? 'text-[var(--fc-action-red)]' : 'text-[var(--fc-black)]'
-                              }`}
-                            >
-                              {getSessionTitle(session)}
-                            </p>
-                            <p className="text-xs text-[var(--fc-body-gray)] mt-0.5">
-                              {formatSessionDate(session.updatedAt)}
-                            </p>
-                          </div>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteSession(session.sessionKey);
-                          }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-100 rounded transition-all"
-                          aria-label="Delete session"
-                        >
-                          <Trash2 size={14} className="text-red-500" />
-                        </button>
-                      </motion.div>
-                    );
-                  })}
+                  {mainSession && renderSession(mainSession, true)}
+
+                  {otherSessions.length > 0 && mainSession && (
+                    <div className="border-t border-[var(--fc-border-gray)] my-2" />
+                  )}
+
+                  {otherSessions.map((session) => renderSession(session, false))}
                 </div>
               )}
             </div>
@@ -145,7 +167,7 @@ export function ChatSidebar({
       {!isOpen && (
         <button
           onClick={onToggle}
-          className="fixed left-4 top-20 z-10 p-2 bg-white border border-[var(--fc-border-gray)] rounded-lg shadow-sm hover:shadow-md transition-shadow"
+          className="fixed left-4 top-20 z-10 p-2 bg-white border border-[var(--fc-border-gray)] rounded-xl shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-md)] transition-shadow"
           aria-label="Open sidebar"
         >
           <PanelLeft size={20} className="text-[var(--fc-body-gray)]" />
@@ -153,4 +175,4 @@ export function ChatSidebar({
       )}
     </>
   );
-}
+});

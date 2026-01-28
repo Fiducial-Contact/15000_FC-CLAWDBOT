@@ -70,24 +70,13 @@ function buildPeerId(userId: string, sessionId?: string): string {
 function isUserWebchatSession(sessionKey: string | undefined, userId: string): boolean {
   if (!sessionKey) return false;
   const parts = sessionKey.split(':');
-  if (parts.length < 3) return false;
+  if (parts.length < 5) return false;
   if (parts[0] !== 'agent' || parts[1] !== GATEWAY_AGENT_ID) return false;
+  if (parts[2] !== WEBCHAT_CHANNEL) return false;
+  if (parts[3] !== 'dm') return false;
 
-  if (parts.length === 3) {
-    return true;
-  }
-
-  if (parts.length >= 4 && parts[2] === 'dm') {
-    const peerId = parts.slice(3).join(':');
-    return peerId.startsWith(userId);
-  }
-
-  if (parts.length >= 5 && parts[2] === WEBCHAT_CHANNEL && parts[3] === 'dm') {
-    const peerId = parts.slice(4).join(':');
-    return peerId.startsWith(userId);
-  }
-
-  return false;
+  const peerId = parts.slice(4).join(':');
+  return peerId.startsWith(userId);
 }
 
 export function useGateway({ userId }: UseGatewayOptions) {
@@ -114,6 +103,8 @@ export function useGateway({ userId }: UseGatewayOptions) {
   const clientRef = useRef<GatewayClient | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
   const streamBufferRef = useRef('');
+  const streamPendingRef = useRef('');
+  const streamFrameRef = useRef<number | null>(null);
   const currentSessionKeyRef = useRef(currentSessionKey);
   const sessionsRef = useRef(sessions);
   const canPatchSessionsRef = useRef(true);
@@ -206,7 +197,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
         currentSessionKeyRef.current = fallbackKey;
       }
     },
-    [userId, currentSessionKey]
+    [userId]
   );
 
   const updateSessionTitle = useCallback(
@@ -263,6 +254,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
       clientName: 'fc-team-chat',
       clientVersion: '1.0.0',
       mode: 'webchat',
+      userId,
     });
 
     clientRef.current = client;
@@ -276,10 +268,24 @@ export function useGateway({ userId }: UseGatewayOptions) {
         );
         if (text) {
           streamBufferRef.current = text;
-          setStreamingContent(text);
+          streamPendingRef.current = text;
+          if (streamFrameRef.current === null) {
+            streamFrameRef.current = requestAnimationFrame(() => {
+              streamFrameRef.current = null;
+              setStreamingContent((prev) => {
+                const pending = streamPendingRef.current;
+                return prev === pending ? prev : pending;
+              });
+            });
+          }
         }
         currentRunIdRef.current = event.runId;
       } else if (event.state === 'final') {
+        if (streamFrameRef.current !== null) {
+          cancelAnimationFrame(streamFrameRef.current);
+          streamFrameRef.current = null;
+        }
+        streamPendingRef.current = '';
         const finalText =
           streamBufferRef.current ||
           extractTextFromContent((event.message as { content?: unknown })?.content);
@@ -299,6 +305,11 @@ export function useGateway({ userId }: UseGatewayOptions) {
         setIsLoading(false);
         currentRunIdRef.current = null;
       } else if (event.state === 'error' || event.state === 'aborted') {
+        if (streamFrameRef.current !== null) {
+          cancelAnimationFrame(streamFrameRef.current);
+          streamFrameRef.current = null;
+        }
+        streamPendingRef.current = '';
         setError(event.errorMessage || 'Response failed');
         streamBufferRef.current = '';
         setStreamingContent('');
@@ -317,8 +328,9 @@ export function useGateway({ userId }: UseGatewayOptions) {
         applyGatewaySessions(sessionList);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Connection failed';
-        if (errorMessage === 'PAIRING_REQUIRED') {
-          setError('Please contact Haiwei for authorization.');
+        if (errorMessage.startsWith('PAIRING_REQUIRED')) {
+          const pairingCode = errorMessage.split(':')[1] || 'unknown';
+          setError(`Authorization required. Your pairing code: ${pairingCode}. Please contact Haiwei to approve.`);
         } else {
           setError(errorMessage);
         }
@@ -332,6 +344,10 @@ export function useGateway({ userId }: UseGatewayOptions) {
       unsubscribe();
       client.disconnect();
       clientRef.current = null;
+      if (streamFrameRef.current !== null) {
+        cancelAnimationFrame(streamFrameRef.current);
+        streamFrameRef.current = null;
+      }
     };
   }, [userId, applyGatewaySessions]);
 
@@ -378,7 +394,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
     };
 
     loadHistory();
-  }, [currentSessionKey, isConnected]);
+  }, [currentSessionKey, isConnected, updateSessionTitle]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -419,7 +435,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
         setIsLoading(false);
       }
     },
-    [currentSessionKey, messages.length]
+    [currentSessionKey, messages.length, updateSessionTitle]
   );
 
   const createNewSession = useCallback(() => {
@@ -444,6 +460,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
   const switchSession = useCallback((sessionKey: string) => {
     if (sessionKey !== currentSessionKey) {
       setCurrentSessionKey(sessionKey);
+      setMessages([]);
       setStreamingContent('');
       streamBufferRef.current = '';
     }
@@ -454,11 +471,18 @@ export function useGateway({ userId }: UseGatewayOptions) {
       return;
     }
 
+    const isMainSession = sessionKey === buildSessionKey(buildPeerId(userId)) ||
+                          sessionKey.endsWith(':main');
+    if (isMainSession) {
+      setError('Cannot delete the main chat. Create a new chat instead.');
+      return;
+    }
+
     try {
       await clientRef.current.deleteSession(sessionKey);
       pendingSessionsRef.current.delete(sessionKey);
       setSessions((prev) => prev.filter((s) => s.sessionKey !== sessionKey));
-      
+
       if (sessionKey === currentSessionKey) {
         const remaining = sessions.filter((s) => s.sessionKey !== sessionKey);
         if (remaining.length > 0) {
@@ -468,18 +492,47 @@ export function useGateway({ userId }: UseGatewayOptions) {
         }
       }
     } catch (err) {
-      console.error('Failed to delete session:', err);
+      const message = err instanceof Error ? err.message : 'Failed to delete session';
+      if (message.toLowerCase().includes('main session')) {
+        setError('Cannot delete the main chat.');
+      } else {
+        console.error('Failed to delete session:', err);
+      }
     }
-  }, [currentSessionKey, sessions, createNewSession]);
+  }, [userId, currentSessionKey, sessions, createNewSession]);
 
   const toggleSidebar = useCallback(() => {
     setIsSidebarOpen((prev) => !prev);
   }, []);
 
+  const abortChat = useCallback(async () => {
+    if (!clientRef.current || !clientRef.current.isConnected() || !currentSessionKey) {
+      return;
+    }
+
+    try {
+      await clientRef.current.abortChat(currentSessionKey);
+      if (streamFrameRef.current !== null) {
+        cancelAnimationFrame(streamFrameRef.current);
+        streamFrameRef.current = null;
+      }
+      streamPendingRef.current = '';
+      streamBufferRef.current = '';
+      setStreamingContent('');
+      setIsLoading(false);
+      currentRunIdRef.current = null;
+    } catch (err) {
+      console.error('Failed to abort chat:', err);
+    }
+  }, [currentSessionKey]);
+
+  const mainSessionKey = buildSessionKey(buildPeerId(userId));
+
   return {
     messages,
     sessions,
     currentSessionKey,
+    mainSessionKey,
     isConnected,
     isLoading,
     error,
@@ -490,5 +543,6 @@ export function useGateway({ userId }: UseGatewayOptions) {
     switchSession,
     deleteSession,
     toggleSidebar,
+    abortChat,
   };
 }
