@@ -200,6 +200,54 @@ p {
   animation: breathing-glow 3s infinite ease-in-out;
 }
 
+@keyframes draw-line {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pulse-flow {
+  0% {
+    stroke-dashoffset: 5;
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: -5;
+    opacity: 0.6;
+  }
+}
+
+.animate-draw-line {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: draw-line 1s ease-out forwards;
+}
+
+.animate-pulse-flow {
+  animation: pulse-flow 2s linear infinite;
+}
+
+@keyframes node-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+.animate-node-pulse {
+  animation: node-pulse 3s ease-in-out infinite;
+}
+
 /* Markdown Content Styles */
 .markdown-content {
   @apply text-[var(--fc-black)];

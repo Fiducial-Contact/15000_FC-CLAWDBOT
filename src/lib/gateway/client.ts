@@ -315,7 +315,8 @@ export class GatewayClient {
     const phase =
       phaseRaw === 'start' || phaseRaw === 'update' || phaseRaw === 'end'
         ? phaseRaw
-        : phaseRaw === 'complete' ||
+        : phaseRaw === 'result' ||
+            phaseRaw === 'complete' ||
             phaseRaw === 'completed' ||
             phaseRaw === 'done' ||
             phaseRaw === 'finish' ||
@@ -324,8 +325,10 @@ export class GatewayClient {
           : 'update';
     const outputDelta =
       (payload.outputDelta as string | undefined) ||
-      (payload.delta as string | undefined);
-    const outputRaw = payload.output ?? payload.result ?? payload.text;
+      (payload.delta as string | undefined) ||
+      (payload.contentDelta as string | undefined);
+    const meta = payload.meta as Record<string, unknown> | undefined;
+    const outputRaw = payload.output ?? payload.result ?? payload.text ?? payload.content ?? meta?.output ?? meta?.result ?? meta?.content;
     const output =
       typeof outputRaw === 'string'
         ? outputRaw
@@ -439,11 +442,27 @@ export class GatewayClient {
         runId?: string;
         stream?: string;
         data?: Record<string, unknown>;
+        output?: unknown;
+        result?: unknown;
+        content?: unknown;
+        delta?: string;
+        outputDelta?: string;
+        contentDelta?: string;
       } | undefined;
       if (agentPayload?.stream !== 'tool' || !agentPayload.sessionKey) {
         return;
       }
-      const merged = { ...(agentPayload.data ?? {}), sessionKey: agentPayload.sessionKey, runId: agentPayload.runId };
+      const merged = {
+        ...(agentPayload.data ?? {}),
+        sessionKey: agentPayload.sessionKey,
+        runId: agentPayload.runId,
+        ...(agentPayload.output !== undefined && { output: agentPayload.output }),
+        ...(agentPayload.result !== undefined && { result: agentPayload.result }),
+        ...(agentPayload.content !== undefined && { content: agentPayload.content }),
+        ...(agentPayload.delta !== undefined && { delta: agentPayload.delta }),
+        ...(agentPayload.outputDelta !== undefined && { outputDelta: agentPayload.outputDelta }),
+        ...(agentPayload.contentDelta !== undefined && { contentDelta: agentPayload.contentDelta }),
+      };
       const toolEvent = this.normalizeToolEvent(merged);
       if (toolEvent) {
         this.toolHandlers.forEach(handler => handler(toolEvent));

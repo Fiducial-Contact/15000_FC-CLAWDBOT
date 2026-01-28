@@ -18,6 +18,7 @@ import {
   Zap,
   Copy,
   Check,
+  Info,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useGateway } from '@/lib/gateway/useGateway';
@@ -27,7 +28,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatSidebar } from '@/components/ChatSidebar';
 import { CapabilityCard } from '@/components/CapabilityCard';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
-import { ToolCard } from '@/components/ToolCard';
+import { ToolCard, ToolCardSkeleton } from '@/components/ToolCard';
 import { AnimatedText } from '@/components/AnimatedText';
 import type { ChatAttachmentInput } from '@/lib/gateway/types';
 
@@ -43,11 +44,8 @@ const CAPABILITY_CATEGORIES = [
     title: 'Image Creation',
     description: 'Generate & edit images',
     color: '#be1e2c',
-    suggestions: [
-      'Draw a cat wearing sunglasses',
-      'Change this image background to a beach',
-      'Generate a minimalist logo for a coffee shop',
-    ],
+    defaultAction: 'Draw a cat wearing sunglasses',
+    requiresInput: false,
   },
   {
     id: 'video-post',
@@ -55,12 +53,8 @@ const CAPABILITY_CATEGORIES = [
     title: 'Video Post',
     description: 'AE & Premiere Pro',
     color: '#e20613',
-    suggestions: [
-      'How to write AE loop expression',
-      'Export 4K ProRes from Premiere',
-      'Best HDR color grading workflow',
-      'Fix render stuck at certain percentage',
-    ],
+    defaultAction: 'How to write AE loop expression',
+    requiresInput: false,
   },
   {
     id: 'video-tools',
@@ -68,12 +62,8 @@ const CAPABILITY_CATEGORIES = [
     title: 'Video Tools',
     description: 'Download & subtitles',
     color: '#cd2e26',
-    suggestions: [
-      'Download this YouTube video',
-      'Generate Chinese subtitles for video',
-      'What does this video talk about',
-      'Extract frame at 30 seconds',
-    ],
+    defaultAction: 'Download this YouTube video: ',
+    requiresInput: true,
   },
   {
     id: 'marketing',
@@ -81,11 +71,8 @@ const CAPABILITY_CATEGORIES = [
     title: 'Marketing',
     description: 'Copywriting & SEO',
     color: '#be1e2c',
-    suggestions: [
-      'Write product copy for this item',
-      'SEO optimization suggestions',
-      'Write a high-converting CTA',
-    ],
+    defaultAction: 'Write product copy for: ',
+    requiresInput: true,
   },
   {
     id: 'reminders',
@@ -93,11 +80,8 @@ const CAPABILITY_CATEGORIES = [
     title: 'Reminders',
     description: 'Task management',
     color: '#e20613',
-    suggestions: [
-      'Remind me in 10 minutes to join the meeting',
-      'Tomorrow 3pm remind me to export project',
-      'List my reminders',
-    ],
+    defaultAction: 'Remind me in 10 minutes to join the meeting',
+    requiresInput: false,
   },
   {
     id: 'summarize',
@@ -105,11 +89,8 @@ const CAPABILITY_CATEGORIES = [
     title: 'Summarize',
     description: 'URLs, PDFs & videos',
     color: '#cd2e26',
-    suggestions: [
-      'Summarize this link',
-      'What does this PDF say',
-      'Just send any URL to summarize',
-    ],
+    defaultAction: 'Summarize this link: ',
+    requiresInput: true,
   },
   {
     id: 'voice',
@@ -117,7 +98,8 @@ const CAPABILITY_CATEGORIES = [
     title: 'Voice',
     description: 'Speech to text',
     color: '#be1e2c',
-    suggestions: ['Send voice message for auto transcription'],
+    defaultAction: 'What can you do with voice messages?',
+    requiresInput: false,
   },
   {
     id: 'more',
@@ -125,21 +107,18 @@ const CAPABILITY_CATEGORIES = [
     title: 'More Tools',
     description: 'Weather, social & more',
     color: '#64748b',
-    suggestions: [
-      'Weather in London',
-      'Post a tweet',
-      'What issues are in this GitHub repo',
-    ],
+    defaultAction: 'Weather in London',
+    requiresInput: false,
   },
 ];
 
 const QUICK_SUGGESTIONS = [
-  { icon: Palette, text: 'Draw a cat wearing sunglasses', color: '#be1e2c' },
-  { icon: Video, text: 'How to write AE loop expression', color: '#e20613' },
-  { icon: Film, text: 'Download this YouTube video', color: '#cd2e26' },
-  { icon: Bell, text: 'Remind me in 10 min to join meeting', color: '#be1e2c' },
-  { icon: FileText, text: 'Summarize this link', color: '#e20613' },
-  { icon: Megaphone, text: 'Write product copy for this', color: '#cd2e26' },
+  { icon: Palette, text: 'Draw a cat wearing sunglasses', color: '#be1e2c', requiresInput: false },
+  { icon: Video, text: 'How to write AE loop expression', color: '#e20613', requiresInput: false },
+  { icon: Film, text: 'Download this YouTube video: ', color: '#cd2e26', requiresInput: true },
+  { icon: Bell, text: 'Remind me in 10 min to join meeting', color: '#be1e2c', requiresInput: false },
+  { icon: FileText, text: 'Summarize this link: ', color: '#e20613', requiresInput: true },
+  { icon: Megaphone, text: 'Write product copy for: ', color: '#cd2e26', requiresInput: true },
 ];
 
 const THINKING_PHRASES = [
@@ -150,6 +129,17 @@ const THINKING_PHRASES = [
   'Almost there...',
 ];
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -158,10 +148,27 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const isAutoScrollRef = useRef(true);
   const lastMessageCountRef = useRef(0);
   const lastStreamLengthRef = useRef(0);
+  const vapidPublicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || '';
   const [sessionCopied, setSessionCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [showThinkingText, setShowThinkingText] = useState(true);
+  const [inputPrefill, setInputPrefill] = useState('');
+  const [pushSupported] = useState(() =>
+    typeof window !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    'Notification' in window
+  );
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return 'default';
+    }
+    return Notification.permission;
+  });
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
 
   const {
     messages,
@@ -184,6 +191,100 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     toggleSidebar,
     abortChat,
   } = useGateway({ userId });
+
+  const getPushSubscription = useCallback(async () => {
+    if (!('serviceWorker' in navigator)) return null;
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) return null;
+    return registration.pushManager.getSubscription();
+  }, []);
+
+  const savePushSubscription = useCallback(async (subscription: PushSubscription, sessionKey: string) => {
+    const response = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subscription: subscription.toJSON(),
+        sessionKey,
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data?.error || 'Failed to save push subscription');
+    }
+  }, []);
+
+  const enablePush = useCallback(async () => {
+    if (!pushSupported) {
+      setPushError('Push notifications are not supported in this browser.');
+      return;
+    }
+    if (!vapidPublicKey) {
+      setPushError('Missing push public key.');
+      return;
+    }
+    if (!currentSessionKey) {
+      setPushError('No active session.');
+      return;
+    }
+
+    setPushBusy(true);
+    setPushError(null);
+
+    const permission = await Notification.requestPermission();
+    setPushPermission(permission);
+    if (permission !== 'granted') {
+      setPushBusy(false);
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    const existing = await registration.pushManager.getSubscription();
+    const subscription =
+      existing ??
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+      }));
+
+    await savePushSubscription(subscription, currentSessionKey);
+    setPushEnabled(true);
+    setPushBusy(false);
+  }, [currentSessionKey, pushSupported, savePushSubscription, vapidPublicKey]);
+
+  const disablePush = useCallback(async () => {
+    setPushBusy(true);
+    setPushError(null);
+    const subscription = await getPushSubscription();
+    if (subscription) {
+      await fetch('/api/push/unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      await subscription.unsubscribe();
+    }
+    setPushEnabled(false);
+    setPushBusy(false);
+  }, [getPushSubscription]);
+
+  const handleSwitchSession = useCallback(
+    async (sessionKey: string) => {
+      switchSession(sessionKey);
+      if (!pushSupported || pushPermission !== 'granted') return;
+      try {
+        const subscription = await getPushSubscription();
+        if (!subscription) return;
+        await savePushSubscription(subscription, sessionKey);
+        setPushEnabled(true);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to sync push subscription';
+        setPushError(message);
+      }
+    },
+    [getPushSubscription, pushPermission, pushSupported, savePushSubscription, switchSession]
+  );
 
   const isNoiseText = useCallback((text: string) => {
     const content = text.trim().toLowerCase();
@@ -224,9 +325,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     return isNoiseText(streamingContent) ? '' : streamingContent;
   }, [streamingContent, showDetails, isNoiseText]);
 
-  const allSuggestions = useMemo(() => {
-    return CAPABILITY_CATEGORIES.flatMap((cat) => cat.suggestions);
-  }, []);
+
 
   useEffect(() => {
     if (!isLoading || displayStreamingContent) return;
@@ -317,13 +416,18 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     }
   };
 
-  const handleSuggestionClick = (text: string) => {
-    sendMessage({ text });
+  const handleSuggestionClick = (text: string, requiresInput = false) => {
+    if (requiresInput) {
+      setInputPrefill(text);
+    } else {
+      sendMessage({ text });
+    }
   };
 
   const handleSurpriseMe = () => {
-    const randomIndex = Math.floor(Math.random() * allSuggestions.length);
-    handleSuggestionClick(allSuggestions[randomIndex]);
+    const sendable = QUICK_SUGGESTIONS.filter((s) => !s.requiresInput);
+    const randomIndex = Math.floor(Math.random() * sendable.length);
+    handleSuggestionClick(sendable[randomIndex].text, false);
   };
 
   const buildSessionText = useCallback(() => {
@@ -412,7 +516,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
           onNewSession={() => {
             createNewSession();
           }}
-          onSelectSession={switchSession}
+          onSelectSession={handleSwitchSession}
           onDeleteSession={deleteSession}
           onToggle={toggleSidebar}
         />
@@ -435,28 +539,53 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
           {/* Session Actions */}
           <div className="px-4 md:px-6 py-3 flex items-center justify-between border-b border-[var(--fc-border-gray)] bg-white/70 backdrop-blur">
-            <button
-              type="button"
-              onClick={() => setShowDetails((prev) => !prev)}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                showDetails
-                  ? 'bg-[var(--fc-subtle-gray)] text-[var(--fc-black)] border-[var(--fc-border-gray)]'
-                  : 'bg-white text-[var(--fc-body-gray)] border-[var(--fc-border-gray)] hover:text-[var(--fc-black)]'
-              }`}
-              aria-pressed={showDetails}
-            >
-              Details: {showDetails ? 'On' : 'Off'}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowDetails((prev) => !prev)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                  showDetails
+                    ? 'bg-[var(--fc-subtle-gray)] text-[var(--fc-black)] border-[var(--fc-border-gray)]'
+                    : 'bg-white text-[var(--fc-body-gray)] border-[var(--fc-border-gray)] hover:text-[var(--fc-black)]'
+                }`}
+                aria-pressed={showDetails}
+              >
+                Details: {showDetails ? 'On' : 'Off'}
+              </button>
+              <div
+                className="relative group"
+                title="Shows thinking process and tool calls. Tool details appear after the response completes."
+              >
+                <Info size={14} className="text-[var(--fc-light-gray)] cursor-help" />
+              </div>
+            </div>
 
-            <button
-              onClick={handleCopySession}
-              disabled={!visibleMessages.length && !displayStreamingContent}
-              className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Copy entire session"
-            >
-              {sessionCopied ? <Check size={12} /> : <Copy size={12} />}
-              {sessionCopied ? 'Copied' : 'Copy session'}
-            </button>
+            <div className="flex items-center gap-2">
+              {pushSupported && (
+                <button
+                  onClick={pushEnabled ? disablePush : enablePush}
+                  disabled={pushBusy || pushPermission === 'denied' || (!pushEnabled && !vapidPublicKey)}
+                  className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={pushError || 'Enable browser notifications'}
+                >
+                  <Bell size={12} />
+                  {pushEnabled
+                    ? 'Notifications on'
+                    : pushPermission === 'denied'
+                      ? 'Notifications blocked'
+                      : 'Enable notifications'}
+                </button>
+              )}
+              <button
+                onClick={handleCopySession}
+                disabled={!visibleMessages.length && !displayStreamingContent}
+                className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Copy entire session"
+              >
+                {sessionCopied ? <Check size={12} /> : <Copy size={12} />}
+                {sessionCopied ? 'Copied' : 'Copy session'}
+              </button>
+            </div>
           </div>
 
           {/* Messages Area */}
@@ -538,7 +667,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                           color={category.color}
                           delay={index * 0.05}
                           onClick={() =>
-                            handleSuggestionClick(category.suggestions[0])
+                            handleSuggestionClick(category.defaultAction, category.requiresInput)
                           }
                         />
                       ))}
@@ -559,7 +688,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                       {QUICK_SUGGESTIONS.map((suggestion, i) => (
                         <motion.button
                           key={i}
-                          onClick={() => handleSuggestionClick(suggestion.text)}
+                          onClick={() => handleSuggestionClick(suggestion.text, suggestion.requiresInput)}
                           className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[var(--fc-border-gray)] rounded-full text-sm hover:border-[var(--fc-action-red)] hover:shadow-md transition-all group"
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
@@ -572,7 +701,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                             style={{ color: suggestion.color }}
                           />
                           <span className="text-[var(--fc-body-gray)] group-hover:text-[var(--fc-black)] transition-colors">
-                            {suggestion.text}
+                            {suggestion.requiresInput ? suggestion.text.replace(/:\s*$/, '') : suggestion.text}
                           </span>
                         </motion.button>
                       ))}
@@ -637,6 +766,17 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                     </motion.div>
                   )}
 
+                  {showDetails && isLoading && activeTools.size === 0 && (
+                    <motion.div
+                      className="space-y-2 pl-12"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      <ToolCardSkeleton />
+                    </motion.div>
+                  )}
+
                   {isLoading && !displayStreamingContent && (
                     <motion.div
                       className="flex items-center gap-3 text-[var(--fc-body-gray)] pl-12"
@@ -664,6 +804,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
             onAbort={abortChat}
             disabled={isLoading || !isConnected}
             isLoading={isLoading}
+            prefillValue={inputPrefill}
+            onPrefillConsumed={() => setInputPrefill('')}
+            isSidebarOpen={isSidebarOpen}
           />
         </main>
       </div>

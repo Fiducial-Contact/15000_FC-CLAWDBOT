@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client';
 
-const DEFAULT_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || 'webchat-uploads';
+const DEFAULT_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim();
 const DEFAULT_TTL_SECONDS = Number(process.env.NEXT_PUBLIC_SUPABASE_SIGNED_URL_TTL_SECONDS || 3600);
 
 function sanitizeFileName(name: string) {
@@ -16,13 +16,27 @@ function resolveTtlSeconds(value?: number) {
   return Math.floor(value);
 }
 
+function resolveBucket(bucket?: string) {
+  const resolved = (bucket ?? DEFAULT_BUCKET)?.trim();
+  if (!resolved) {
+    throw new Error('Storage bucket is not configured. Set NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET.');
+  }
+  return resolved;
+}
+
+function isBucketNotFound(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes('bucket') && normalized.includes('not found');
+}
+
 export async function uploadFileAndCreateSignedUrl(params: {
   file: File;
   userId: string;
   bucket?: string;
   ttlSeconds?: number;
 }) {
-  const { file, userId, bucket = DEFAULT_BUCKET, ttlSeconds } = params;
+  const { file, userId, bucket, ttlSeconds } = params;
+  const resolvedBucket = resolveBucket(bucket);
   const supabase = createClient();
   const safeName = sanitizeFileName(file.name || 'file');
   const fileId = crypto.randomUUID();
@@ -31,7 +45,7 @@ export async function uploadFileAndCreateSignedUrl(params: {
   const contentType = file.type || 'application/octet-stream';
 
   const { error: uploadError } = await supabase.storage
-    .from(bucket)
+    .from(resolvedBucket)
     .upload(path, file, {
       cacheControl: '3600',
       upsert: false,
@@ -39,16 +53,21 @@ export async function uploadFileAndCreateSignedUrl(params: {
     });
 
   if (uploadError) {
+    if (isBucketNotFound(uploadError.message)) {
+      throw new Error(
+        `Storage bucket "${resolvedBucket}" not found. Check NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET and Supabase project.`
+      );
+    }
     throw new Error(uploadError.message);
   }
 
   const { data, error: signedError } = await supabase.storage
-    .from(bucket)
+    .from(resolvedBucket)
     .createSignedUrl(path, resolveTtlSeconds(ttlSeconds));
 
   if (signedError || !data?.signedUrl) {
     throw new Error(signedError?.message || 'Failed to create signed URL');
   }
 
-  return { bucket, path, signedUrl: data.signedUrl };
+  return { bucket: resolvedBucket, path, signedUrl: data.signedUrl };
 }

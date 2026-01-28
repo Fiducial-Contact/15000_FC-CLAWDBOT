@@ -40,9 +40,12 @@ interface ChatInputProps {
   onAbort?: () => void;
   disabled?: boolean;
   isLoading?: boolean;
+  prefillValue?: string;
+  onPrefillConsumed?: () => void;
+  isSidebarOpen?: boolean;
 }
 
-export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputProps) {
+export function ChatInput({ onSend, onAbort, disabled, isLoading, prefillValue, onPrefillConsumed, isSidebarOpen = false }: ChatInputProps) {
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [showPlaceholder, setShowPlaceholder] = useState(true);
   const [inputValue, setInputValue] = useState('');
@@ -51,11 +54,26 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputPro
   const [isFocused, setIsFocused] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [thinkActive, setThinkActive] = useState(true);
-  const [deepSearchActive, setDeepSearchActive] = useState(false);
+  const [deepSearchActive, setDeepSearchActive] = useState(true);
+  const [isPrefillHighlight, setIsPrefillHighlight] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
+
+  useEffect(() => {
+    if (prefillValue) {
+      setInputValue(prefillValue);
+      onPrefillConsumed?.();
+      setIsPrefillHighlight(true);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        const len = prefillValue.length;
+        inputRef.current?.setSelectionRange(len, len);
+      }, 0);
+      setTimeout(() => setIsPrefillHighlight(false), 2000);
+    }
+  }, [prefillValue, onPrefillConsumed]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -220,19 +238,42 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputPro
   };
 
   return (
-    <div className="w-full px-4 pb-4 pt-2">
-      <motion.div
-        ref={containerRef}
-        className={`relative max-w-3xl mx-auto bg-white rounded-2xl border-2 shadow-[var(--shadow-md)] transition-all duration-300 ${
-          isDragging
-            ? 'border-[var(--fc-action-red)] border-dashed bg-red-50/30'
-            : 'border-[var(--fc-border-gray)] hover:border-[var(--fc-light-gray)]'
-        }`}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-      >
+    <>
+      <AnimatePresence>
+        {isPrefillHighlight && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -30 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+            className="fixed top-20 z-50 flex justify-center"
+            style={{
+              left: isSidebarOpen ? 300 : 0,
+              right: 0,
+            }}
+          >
+            <span className="inline-flex items-center gap-2 px-4 py-2.5 bg-[var(--fc-charcoal)] text-white text-sm font-medium rounded-full shadow-lg">
+              <Sparkles size={14} className="text-[var(--fc-action-red)]" />
+              Add your link or content, then send
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div className="w-full px-4 pb-4 pt-2">
+        <motion.div
+          ref={containerRef}
+          className={`relative max-w-3xl mx-auto bg-white rounded-2xl border-2 shadow-[var(--shadow-md)] transition-colors duration-300 ${
+            isDragging
+              ? 'border-[var(--fc-action-red)] border-dashed bg-red-50/30'
+              : isPrefillHighlight
+                ? 'animate-breathing-glow'
+                : 'border-[var(--fc-border-gray)] hover:border-[var(--fc-light-gray)]'
+          }`}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
         {/* Drag Overlay */}
         <AnimatePresence>
           {isDragging && (
@@ -452,10 +493,11 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputPro
         </div>
       </motion.div>
 
-      {/* Footer hint */}
-      <p className="text-center text-[11px] text-[var(--fc-light-gray)] mt-2">
-        AI can make mistakes. Please verify important information.
-      </p>
-    </div>
+        {/* Footer hint */}
+        <p className="text-center text-[11px] text-[var(--fc-light-gray)] mt-2">
+          AI can make mistakes. Please verify important information.
+        </p>
+      </div>
+    </>
   );
 }

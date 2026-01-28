@@ -236,6 +236,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingHistoryKey, setLoadingHistoryKey] = useState<string | null>(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -256,6 +257,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
   const skipHistoryLoadRef = useRef(false);
   const toolRemovalTimersRef = useRef<Map<string, number>>(new Map());
   const sessionTitleCacheRef = useRef<Record<string, string>>({});
+  const historyRefreshTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -341,6 +343,10 @@ export function useGateway({ userId }: UseGatewayOptions) {
     setIsLoading(false);
     currentRunIdRef.current = null;
     setActiveTools(new Map());
+    if (historyRefreshTimeoutRef.current !== null) {
+      window.clearTimeout(historyRefreshTimeoutRef.current);
+      historyRefreshTimeoutRef.current = null;
+    }
     toolRemovalTimersRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     toolRemovalTimersRef.current.clear();
   }, []);
@@ -452,6 +458,9 @@ export function useGateway({ userId }: UseGatewayOptions) {
           canPatchSessionsRef.current = false;
           return;
         }
+        if (message.toLowerCase().includes('label already in use')) {
+          return;
+        }
         if (message.toLowerCase().includes('unexpected property') && message.includes('label')) {
           try {
             await clientRef.current.patchSession(sessionKey, { displayName: title });
@@ -543,6 +552,13 @@ export function useGateway({ userId }: UseGatewayOptions) {
         setStreamingContent('');
         setIsLoading(false);
         currentRunIdRef.current = null;
+        if (historyRefreshTimeoutRef.current !== null) {
+          window.clearTimeout(historyRefreshTimeoutRef.current);
+        }
+        historyRefreshTimeoutRef.current = window.setTimeout(() => {
+          historyRefreshTimeoutRef.current = null;
+          setHistoryRefreshKey((prev) => prev + 1);
+        }, 400);
       } else if (event.state === 'error' || event.state === 'aborted') {
         if (streamFrameRef.current !== null) {
           cancelAnimationFrame(streamFrameRef.current);
@@ -631,6 +647,10 @@ export function useGateway({ userId }: UseGatewayOptions) {
       }
       timers.forEach((timeoutId) => window.clearTimeout(timeoutId));
       timers.clear();
+      if (historyRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(historyRefreshTimeoutRef.current);
+        historyRefreshTimeoutRef.current = null;
+      }
     };
   }, [userId, applyGatewaySessions]);
 
@@ -710,7 +730,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
     };
 
     loadHistory();
-  }, [currentSessionKey, isConnected, updateSessionTitle]);
+  }, [currentSessionKey, isConnected, updateSessionTitle, historyRefreshKey]);
 
   const commitDraftSession = useCallback(() => {
     const newSessionId = generateSessionId();

@@ -56,6 +56,31 @@ interface ToolCardProps {
   isStreaming?: boolean;
 }
 
+export function ToolCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-[var(--fc-border-gray)] bg-white overflow-hidden animate-pulse">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--fc-border-gray)]">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-[var(--fc-subtle-gray)]">
+            <div className="w-4 h-4 bg-zinc-200 rounded" />
+          </div>
+          <div className="h-4 w-24 bg-zinc-200 rounded" />
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-[var(--fc-action-red)]/10">
+          <Loader2 size={12} className="animate-spin text-[var(--fc-action-red)]" />
+          <span className="text-xs font-medium text-[var(--fc-action-red)]">Working...</span>
+        </div>
+      </div>
+      <div className="px-4 py-3">
+        <div className="space-y-2">
+          <div className="h-3 w-3/4 bg-zinc-100 rounded" />
+          <div className="h-3 w-1/2 bg-zinc-100 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const ToolCard = memo(function ToolCard({
   toolName,
   parameters,

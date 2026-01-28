@@ -1,6 +1,8 @@
 # Fiducial Communications AI Assistant (Microsoft Teams)
 
 > **给 LLM 的说明**: 这是一个 Clawdbot (AI 聊天机器人网关) 配置项目。VPS 已部署完成，等待 Teams Admin 权限。
+>
+> **⚠️ 额外说明（Haiwei 个人 Agent）**: 本仓库同时记录 Haiwei 的个人 Agent 运行配置/自动化（心跳、深夜研究、Notion Activity Log、安全加固）。团队使用 Teams Bot 的配置/流程仍以本文档 Teams 部分为准，避免混淆。
 
 ---
 
@@ -17,6 +19,33 @@
 | **Teams App 权限** | ❌ 等待 Admin |
 
 ---
+
+## Haiwei 个人 Agent（非团队配置）
+
+> 这一部分是 Haiwei 个人 Agent 的运行说明，与 Teams 团队 Bot 解耦。
+
+**运行目录**
+- `/root/clawd-personal`
+
+**自动化时间表（London）**
+- 心跳：08:00-23:00，每 30 分钟
+- 深夜心跳：03:00（仅紧急才发消息）
+- 深度研究：00:30 / 05:30
+- 研究复查：07:30（生成 `memory/briefing-prep.md`）
+- 早报：08:00
+- 日常研究：10:00 / 22:00
+- 睡觉提醒：23:00 / 23:45
+- Twitter Likes → Notion：12:00 / 20:00
+
+**行为观察（Notion Activity Log）**
+- 记录由观察器生成，AI 不知情
+- 内容统一为英文
+- 脚本：`/root/clawd-personal/scripts/activity-observer.py`
+
+**安全加固（已执行）**
+- SSH 改为 2222，root 登录禁用
+- 启用 UFW + fail2ban
+- WhatsApp/Teams groupPolicy 改为 allowlist
 
 ## 剩余步骤：获取 Teams 权限
 
@@ -66,8 +95,8 @@ IT 操作完成后（可能需要几小时生效），你自己上传：
 3. 因为配置了 `dmPolicy: "pairing"`，第一次需要批准：
 
 ```bash
-ssh root@46.224.225.164 "clawdbot pairing list msteams"
-ssh root@46.224.225.164 "clawdbot pairing approve msteams <code>"
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing list msteams"
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing approve msteams <code>"
 ```
 
 ---
@@ -86,7 +115,7 @@ ssh root@46.224.225.164 "clawdbot pairing approve msteams <code>"
 | 项目 | 值 |
 |------|-----|
 | IP | `46.224.225.164` |
-| SSH | `ssh root@46.224.225.164` (需要 1Password SSH Agent 中的密钥) |
+| SSH | `ssh -p 2222 haiwei@46.224.225.164` (需要 1Password SSH Agent 中的密钥) |
 | Tailscale | `clawdbot.tail297e45.ts.net` |
 | Teams Webhook | `https://clawdbot.tail297e45.ts.net/api/messages` |
 | Gateway Port | 18789 (loopback) |
@@ -98,20 +127,20 @@ ssh root@46.224.225.164 "clawdbot pairing approve msteams <code>"
 
 ```bash
 # SSH 到 VPS
-ssh root@46.224.225.164
+ssh -p 2222 haiwei@46.224.225.164
 
 # 检查状态
-ssh root@46.224.225.164 "clawdbot status"
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot status"
 
 # 查看日志
-ssh root@46.224.225.164 "clawdbot logs -f"
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot logs -f"
 
 # 重启 gateway
-ssh root@46.224.225.164 "clawdbot gateway restart"
+ssh -p 2222 haiwei@46.224.225.164 "sudo XDG_RUNTIME_DIR=/run/user/0 systemctl --user restart clawdbot-gateway"
 
 # Pairing 管理
-ssh root@46.224.225.164 "clawdbot pairing list msteams"
-ssh root@46.224.225.164 "clawdbot pairing approve msteams <code>"
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing list msteams"
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing approve msteams <code>"
 ```
 
 ---
@@ -122,8 +151,8 @@ ssh root@46.224.225.164 "clawdbot pairing approve msteams <code>"
 2. 你批准 pairing：
 
 ```bash
-ssh root@46.224.225.164 "clawdbot pairing list msteams"
-ssh root@46.224.225.164 "clawdbot pairing approve msteams <code>"
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing list msteams"
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing approve msteams <code>"
 ```
 
 ---
