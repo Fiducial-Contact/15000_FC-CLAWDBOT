@@ -21,29 +21,29 @@ export function LoginForm({ onLogin, error, loading }: LoginFormProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--fc-off-white)] flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <div className="text-center mb-8">
+    <div className="min-h-screen bg-[var(--fc-off-white)] flex items-center justify-center p-6">
+      <div className="w-full max-w-[400px]">
+        <div className="bg-white rounded-none border-0 sm:border sm:border-[var(--fc-border-gray)] sm:rounded-2xl sm:shadow-[var(--shadow-card)] p-8 sm:p-10">
+          <div className="text-center mb-10">
             <Image
               src="/brand/Fiducial-logo-2021_RGB.svg"
               alt="Fiducial Communications"
-              width={180}
-              height={45}
-              className="mx-auto mb-6"
+              width={160}
+              height={40}
+              className="mx-auto mb-8 opacity-90"
               priority
             />
-            <h1 className="text-2xl font-bold text-[var(--fc-black)] mb-2">
-              Team AI Assistant
+            <h1 className="text-xl font-semibold text-[var(--fc-black)] mb-2 tracking-tight">
+              Welcome back
             </h1>
-            <p className="text-[var(--fc-body-gray)] text-sm">
-              Sign in to access your AI assistant
+            <p className="text-[var(--fc-body-gray)] text-[14px]">
+              Sign in to your workspace
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-[var(--fc-black)] mb-1.5">
+              <label htmlFor="email" className="block text-[13px] font-medium text-[var(--fc-black)] mb-2">
                 Email
               </label>
               <input
@@ -51,23 +51,23 @@ export function LoginForm({ onLogin, error, loading }: LoginFormProps) {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@fiducialcomms.com"
+                placeholder="name@company.com"
                 required
                 className="
-                  w-full px-4 py-3
-                  bg-[var(--fc-off-white)]
+                  w-full px-3.5 py-2.5
+                  bg-white
                   border border-[var(--fc-border-gray)]
-                  rounded-xl
-                  text-[var(--fc-black)] text-sm
+                  rounded-lg
+                  text-[var(--fc-black)] text-[14px]
                   placeholder:text-[var(--fc-light-gray)]
-                  focus:outline-none focus:border-[var(--fc-action-red)] focus:ring-1 focus:ring-[var(--fc-action-red)]
-                  transition-colors
+                  transition-all
+                  focus:border-[var(--fc-black)] focus:ring-1 focus:ring-[var(--fc-black)]
                 "
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-[var(--fc-black)] mb-1.5">
+              <label htmlFor="password" className="block text-[13px] font-medium text-[var(--fc-black)] mb-2">
                 Password
               </label>
               <input
@@ -75,23 +75,24 @@ export function LoginForm({ onLogin, error, loading }: LoginFormProps) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                placeholder="Enter password"
                 required
                 className="
-                  w-full px-4 py-3
-                  bg-[var(--fc-off-white)]
+                  w-full px-3.5 py-2.5
+                  bg-white
                   border border-[var(--fc-border-gray)]
-                  rounded-xl
-                  text-[var(--fc-black)] text-sm
+                  rounded-lg
+                  text-[var(--fc-black)] text-[14px]
                   placeholder:text-[var(--fc-light-gray)]
-                  focus:outline-none focus:border-[var(--fc-action-red)] focus:ring-1 focus:ring-[var(--fc-action-red)]
-                  transition-colors
+                  transition-all
+                  focus:border-[var(--fc-black)] focus:ring-1 focus:ring-[var(--fc-black)]
                 "
               />
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+              <div className="bg-red-50 text-[var(--fc-action-red)] px-4 py-3 rounded-lg text-[13px] font-medium border border-red-100 flex items-start gap-2">
+                <span>•</span>
                 {error}
               </div>
             )}
@@ -100,22 +101,24 @@ export function LoginForm({ onLogin, error, loading }: LoginFormProps) {
               type="submit"
               disabled={loading || !email || !password}
               className="
-                w-full py-3.5
-                bg-[var(--fc-action-red)]
-                hover:bg-[var(--fc-dark-red)]
-                disabled:bg-[var(--fc-border-gray)] disabled:cursor-not-allowed
-                text-white font-semibold text-sm
-                rounded-xl
-                transition-colors
+                w-full py-2.5
+                bg-[var(--fc-black)]
+                hover:bg-[var(--fc-charcoal)]
+                disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed
+                text-white font-medium text-[14px]
+                rounded-lg
+                shadow-sm hover:shadow-md
+                transition-all
+                mt-2
               "
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-[var(--fc-border-gray)]">
-            <p className="text-xs text-[var(--fc-light-gray)] text-center">
-              Having trouble signing in? Contact IT support.
+          <div className="mt-8 pt-6 border-t border-dashed border-[var(--fc-border-gray)]">
+            <p className="text-[12px] text-[var(--fc-light-gray)] text-center">
+              Protected by Fiducial Enterprise Grid
             </p>
           </div>
         </div>

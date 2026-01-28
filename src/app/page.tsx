@@ -27,7 +27,6 @@ export default function Home() {
     }
 
     router.push('/chat');
-    router.refresh();
   };
 
   return <LoginForm onLogin={handleLogin} error={error} loading={loading} />;

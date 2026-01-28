@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import Image from 'next/image';
 import { LogOut, User } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -9,9 +10,9 @@ interface HeaderProps {
   onLogout?: () => void;
 }
 
-export function Header({ userName, onLogout }: HeaderProps) {
+export const Header = memo(function Header({ userName, onLogout }: HeaderProps) {
   return (
-    <header className="bg-white border-b border-[var(--fc-border-gray)] px-4 md:px-6 py-3">
+    <header className="bg-white border-b border-[var(--fc-border-gray)] px-4 md:px-6 py-3 shadow-[var(--shadow-sm)]">
       <div className="max-w-6xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Image
@@ -54,4 +55,4 @@ export function Header({ userName, onLogout }: HeaderProps) {
       </div>
     </header>
   );
-}
+});

@@ -42,6 +42,7 @@ type GatewayClientOptions = {
   mode?: string;
   instanceId?: string;
   scopes?: string[];
+  userId?: string;
 };
 
 type DeviceIdentity = {
@@ -102,8 +103,15 @@ async function fingerprintPublicKey(publicKey: Uint8Array): Promise<string> {
   return bytesToHex(new Uint8Array(hash));
 }
 
-async function generateIdentity(): Promise<DeviceIdentity> {
-  const privateKey = utils.randomSecretKey();
+async function generateIdentity(seed?: string): Promise<DeviceIdentity> {
+  let privateKey: Uint8Array;
+  if (seed) {
+    const seedBytes = new TextEncoder().encode(seed);
+    const hash = await crypto.subtle.digest('SHA-256', seedBytes);
+    privateKey = new Uint8Array(hash);
+  } else {
+    privateKey = utils.randomSecretKey();
+  }
   const publicKey = await getPublicKeyAsync(privateKey);
   const deviceId = await fingerprintPublicKey(publicKey);
   return {
@@ -113,9 +121,11 @@ async function generateIdentity(): Promise<DeviceIdentity> {
   };
 }
 
-async function loadOrCreateDeviceIdentity(): Promise<DeviceIdentity> {
+async function loadOrCreateDeviceIdentity(userId?: string): Promise<DeviceIdentity> {
+  const storageKey = userId ? `${IDENTITY_STORAGE_KEY}:${userId}` : IDENTITY_STORAGE_KEY;
+
   try {
-    const raw = localStorage.getItem(IDENTITY_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (raw) {
       const parsed = JSON.parse(raw) as StoredIdentity;
       if (
@@ -130,7 +140,7 @@ async function loadOrCreateDeviceIdentity(): Promise<DeviceIdentity> {
             ...parsed,
             deviceId: derivedId,
           };
-          localStorage.setItem(IDENTITY_STORAGE_KEY, JSON.stringify(updated));
+          localStorage.setItem(storageKey, JSON.stringify(updated));
           return {
             deviceId: derivedId,
             publicKey: parsed.publicKey,
@@ -148,7 +158,8 @@ async function loadOrCreateDeviceIdentity(): Promise<DeviceIdentity> {
     // ignore and regenerate
   }
 
-  const identity = await generateIdentity();
+  const seed = userId ? `fc-webchat:${userId}` : undefined;
+  const identity = await generateIdentity(seed);
   const stored: StoredIdentity = {
     version: 1,
     deviceId: identity.deviceId,
@@ -156,7 +167,7 @@ async function loadOrCreateDeviceIdentity(): Promise<DeviceIdentity> {
     privateKey: identity.privateKey,
     createdAtMs: Date.now(),
   };
-  localStorage.setItem(IDENTITY_STORAGE_KEY, JSON.stringify(stored));
+  localStorage.setItem(storageKey, JSON.stringify(stored));
   return identity;
 }
 
@@ -363,7 +374,7 @@ export class GatewayClient {
     if (this.connectSent) return;
     this.connectSent = true;
 
-    const scopes = this.opts.scopes ?? ['operator.read', 'operator.write'];
+    const scopes = this.opts.scopes ?? ['operator.read', 'operator.write', 'operator.admin'];
     const role = 'operator';
     const isSecureContext = typeof crypto !== 'undefined' && !!crypto.subtle;
 
@@ -372,7 +383,7 @@ export class GatewayClient {
     let authToken = this.opts.token;
 
     if (isSecureContext) {
-      deviceIdentity = await loadOrCreateDeviceIdentity();
+      deviceIdentity = await loadOrCreateDeviceIdentity(this.opts.userId);
       const storedToken = loadDeviceAuthToken({
         deviceId: deviceIdentity.deviceId,
         role,
@@ -457,7 +468,9 @@ export class GatewayClient {
       const errorMessage = err instanceof Error ? err.message : 'Connect failed';
       const isPairingRequired = errorMessage.toLowerCase().includes('pairing');
       if (isPairingRequired) {
-        this.connectReject?.(new Error('PAIRING_REQUIRED'));
+        const codeMatch = errorMessage.match(/code[:\s]+([A-Z0-9-]+)/i);
+        const pairingCode = codeMatch?.[1] || deviceIdentity?.deviceId?.slice(0, 8) || 'unknown';
+        this.connectReject?.(new Error(`PAIRING_REQUIRED:${pairingCode}`));
       } else {
         this.connectReject?.(err instanceof Error ? err : new Error('Connect failed'));
       }
@@ -533,7 +546,7 @@ export class GatewayClient {
       throw new Error('Not connected to gateway');
     }
 
-    await this.sendRequest('sessions.patch', { sessionKey, patch });
+    await this.sendRequest('sessions.patch', { key: sessionKey, ...patch });
   }
 
   async deleteSession(sessionKey: string): Promise<void> {
@@ -541,7 +554,15 @@ export class GatewayClient {
       throw new Error('Not connected to gateway');
     }
 
-    await this.sendRequest('sessions.delete', { sessionKey });
+    await this.sendRequest('sessions.delete', { key: sessionKey });
+  }
+
+  async abortChat(sessionKey: string): Promise<void> {
+    if (!this.connected) {
+      throw new Error('Not connected to gateway');
+    }
+
+    await this.sendRequest('chat.abort', { sessionKey });
   }
 
   onChat(handler: ChatHandler) {
