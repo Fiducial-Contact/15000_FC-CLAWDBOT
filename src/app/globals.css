@@ -1,26 +1,102 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Fiducial Brand Colors */
+  --fc-red: #be1e2c;
+  --fc-action-red: #e20613;
+  --fc-dark-red: #cd2e26;
+  --fc-black: #1a1b1f;
+  --fc-dark-gray: #222;
+  --fc-body-gray: #5a5a5a;
+  --fc-light-gray: #868686;
+  --fc-off-white: #f7f7fa;
+  --fc-white: #ffffff;
+  --fc-border-gray: #e4e4e4;
+  --fc-subtle-gray: #f5f5f5;
+  
+  /* Semantic mapping */
+  --background: var(--fc-off-white);
+  --foreground: var(--fc-black);
+  --accent: var(--fc-action-red);
+  --accent-hover: var(--fc-dark-red);
+  --muted: var(--fc-body-gray);
+  --border: var(--fc-border-gray);
+  --card: var(--fc-white);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  
+  /* Fiducial Colors */
+  --color-fc-red: var(--fc-red);
+  --color-fc-action-red: var(--fc-action-red);
+  --color-fc-dark-red: var(--fc-dark-red);
+  --color-fc-black: var(--fc-black);
+  --color-fc-body-gray: var(--fc-body-gray);
+  --color-fc-off-white: var(--fc-off-white);
+  --color-fc-white: var(--fc-white);
+  --color-fc-border-gray: var(--fc-border-gray);
+  
+  --font-heading: var(--font-manrope), 'Manrope', sans-serif;
+  --font-body: var(--font-inter), 'Inter', sans-serif;
+  --font-ui: var(--font-montserrat), 'Montserrat', sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--fc-black);
+  letter-spacing: -0.022rem;
+  line-height: 140%;
+}
+
+h1 { font-size: 3rem; }
+h2 { font-size: 2.5rem; }
+h3 { font-size: 2rem; }
+h4 { font-size: 1.8rem; }
+h5 { font-size: 1.5rem; }
+
+p {
+  color: var(--fc-body-gray);
+  margin-bottom: 1rem;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--fc-off-white);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--fc-border-gray);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fc-light-gray);
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--fc-action-red);
+  outline-offset: 2px;
 }
