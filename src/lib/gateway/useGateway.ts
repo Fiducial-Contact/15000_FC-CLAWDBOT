@@ -653,7 +653,13 @@ export function useGateway({ userId }: UseGatewayOptions) {
           const loadTime = Date.now();
           const loaded: Message[] = history.map((msg, idx) => {
             const m = msg as HistoryMessage;
-            const isToolResult = m.role === 'toolResult' || m.role === 'tool_result';
+            const normalizedRole = typeof m.role === 'string' ? m.role.toLowerCase() : '';
+            const isToolResult =
+              normalizedRole === 'toolresult' ||
+              normalizedRole === 'tool_result' ||
+              normalizedRole === 'tool' ||
+              normalizedRole === 'tool_output' ||
+              normalizedRole === 'tooloutput';
             const contentText = extractTextFromContent(m.content);
             const blocks = isToolResult
               ? ([
