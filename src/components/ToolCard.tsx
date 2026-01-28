@@ -17,10 +17,9 @@ import {
   X,
   Loader2,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import type { ToolExecutionStatus } from '@/lib/gateway/types';
 
-const TOOL_ICONS: Record<string, LucideIcon> = {
+const TOOL_ICONS: Record<string, typeof Wrench> = {
   'nano-banana-pro': Palette,
   'video-frames': Film,
   'summarize': FileText,
@@ -34,12 +33,12 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   'query': Database,
 };
 
-function getToolIcon(toolName: string): LucideIcon {
+function ToolIcon({ toolName, size, className }: { toolName: string; size: number; className?: string }) {
   const lowerName = toolName.toLowerCase();
-  for (const [key, icon] of Object.entries(TOOL_ICONS)) {
-    if (lowerName.includes(key)) return icon;
+  for (const [key, IconComponent] of Object.entries(TOOL_ICONS)) {
+    if (lowerName.includes(key)) return <IconComponent size={size} className={className} />;
   }
-  return Wrench;
+  return <Wrench size={size} className={className} />;
 }
 
 function formatToolName(name: string): string {
@@ -66,13 +65,27 @@ export const ToolCard = memo(function ToolCard({
   isStreaming = false,
 }: ToolCardProps) {
   const [showParams, setShowParams] = useState(false);
-  const [showResult, setShowResult] = useState(status === 'completed' || status === 'failed');
+  const [showResult, setShowResult] = useState(false);
 
-  const Icon = useMemo(() => getToolIcon(toolName), [toolName]);
-  const displayName = useMemo(() => formatToolName(toolName), [toolName]);
+  const displayName = formatToolName(toolName);
 
   const hasParams = parameters && Object.keys(parameters).length > 0;
   const hasResult = result !== undefined || error;
+  const resultText = typeof result === 'string' ? result : result ? JSON.stringify(result, null, 2) : '';
+  const previewText = useMemo(() => {
+    if (!resultText) return '';
+    const maxChars = 420;
+    const maxLines = 8;
+    const lines = resultText.split('\n');
+    const trimmedLines = lines.slice(0, maxLines);
+    let preview = trimmedLines.join('\n');
+    if (preview.length > maxChars) {
+      preview = preview.slice(0, maxChars).trimEnd();
+    }
+    const hasMore = lines.length > maxLines || resultText.length > preview.length;
+    return hasMore ? `${preview}\n…` : preview;
+  }, [resultText]);
+  const hasMoreResult = resultText.length > previewText.length;
 
   const statusConfig = {
     running: {
@@ -102,7 +115,7 @@ export const ToolCard = memo(function ToolCard({
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--fc-border-gray)]">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 rounded-lg bg-[var(--fc-subtle-gray)]">
-            <Icon size={16} className="text-[var(--fc-body-gray)]" />
+            <ToolIcon toolName={toolName} size={16} className="text-[var(--fc-body-gray)]" />
           </div>
           <span className="text-sm font-medium text-[var(--fc-black)]">
             {displayName}
@@ -166,6 +179,22 @@ export const ToolCard = memo(function ToolCard({
               }`}
             />
           </button>
+          {!showResult && !error && previewText && (
+            <div className="px-4 pb-3">
+              <pre className="text-[11px] text-[var(--fc-body-gray)] font-mono bg-[var(--fc-subtle-gray)]/60 rounded-lg px-3 py-2 max-h-20 overflow-hidden">
+                {previewText}
+              </pre>
+              {hasMoreResult && (
+                <button
+                  type="button"
+                  onClick={() => setShowResult(true)}
+                  className="mt-2 text-[11px] font-medium text-[var(--fc-action-red)] hover:underline"
+                >
+                  Show full result
+                </button>
+              )}
+            </div>
+          )}
           <AnimatePresence initial={false}>
             {showResult && (
               <motion.div
@@ -178,10 +207,8 @@ export const ToolCard = memo(function ToolCard({
                 {error ? (
                   <p className="px-4 pb-3 text-xs text-red-600">{error}</p>
                 ) : (
-                  <pre className="px-4 pb-3 text-xs text-[var(--fc-body-gray)] font-mono overflow-x-auto max-h-48 overflow-y-auto">
-                    {typeof result === 'string'
-                      ? result
-                      : JSON.stringify(result, null, 2)}
+                  <pre className="px-4 pb-3 text-xs text-[var(--fc-body-gray)] font-mono overflow-x-auto max-h-56 overflow-y-auto">
+                    {resultText}
                     {isStreaming && (
                       <span className="inline-block w-1.5 h-4 bg-[var(--fc-action-red)] animate-pulse ml-0.5" />
                     )}

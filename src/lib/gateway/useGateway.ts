@@ -14,12 +14,14 @@ import { uploadFileAndCreateSignedUrl } from '@/lib/storage/upload';
 
 interface Message {
   id: string;
+  sessionKey: string;
   content: string;
   role: 'user' | 'assistant';
   timestamp: string;
   blocks?: ChatContentBlock[];
   attachments?: ChatAttachment[];
   sent?: boolean;
+  isToolResult?: boolean;
 }
 
 interface HistoryMessage {
@@ -36,6 +38,8 @@ interface SendMessagePayload {
 interface UseGatewayOptions {
   userId: string;
 }
+
+const SESSION_TITLE_CACHE_KEY = 'fc-session-titles';
 
 function normalizeContentBlocks(content: unknown): ChatContentBlock[] {
   if (!content) return [];
@@ -254,6 +258,38 @@ export function useGateway({ userId }: UseGatewayOptions) {
   const isDraftSessionRef = useRef(isDraftSession);
   const skipHistoryLoadRef = useRef(false);
   const toolRemovalTimersRef = useRef<Map<string, number>>(new Map());
+  const sessionTitleCacheRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      const raw = localStorage.getItem(`${SESSION_TITLE_CACHE_KEY}:${userId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, string>;
+        if (parsed && typeof parsed === 'object') {
+          sessionTitleCacheRef.current = parsed;
+        }
+      }
+    } catch {
+      sessionTitleCacheRef.current = {};
+    }
+  }, [userId]);
+
+  const persistSessionTitle = useCallback((sessionKey: string, title: string) => {
+    if (!userId) return;
+    sessionTitleCacheRef.current = {
+      ...sessionTitleCacheRef.current,
+      [sessionKey]: title,
+    };
+    try {
+      localStorage.setItem(
+        `${SESSION_TITLE_CACHE_KEY}:${userId}`,
+        JSON.stringify(sessionTitleCacheRef.current)
+      );
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [userId]);
 
   useEffect(() => {
     if (userId && !currentSessionKey) {
@@ -325,10 +361,27 @@ export function useGateway({ userId }: UseGatewayOptions) {
         pendingSessionsRef.current.delete(key);
       }
 
+      const normalizedSessions: SessionEntry[] = gatewaySessions.map((session) => {
+        const cachedTitle = sessionTitleCacheRef.current[session.sessionKey];
+        const displayName = session.displayName;
+        const shouldPreferCache = Boolean(
+          cachedTitle &&
+            (!displayName ||
+              displayName === 'fc-team-chat' ||
+              displayName === 'Main Chat' ||
+              displayName === 'New Chat' ||
+              (session.origin?.label && displayName === session.origin.label))
+        );
+        return {
+          ...session,
+          displayName: shouldPreferCache ? cachedTitle : displayName,
+        };
+      });
+
       const defaultKey = buildSessionKey(buildPeerId(userId));
-      const hasDefaultSession = gatewaySessions.some((s) => s.sessionKey === defaultKey);
-      const nextSessions = hasDefaultSession
-        ? [...gatewaySessions]
+      const hasDefaultSession = normalizedSessions.some((s) => s.sessionKey === defaultKey);
+      const nextSessions: SessionEntry[] = hasDefaultSession
+        ? [...normalizedSessions]
         : [
             {
               sessionKey: defaultKey,
@@ -336,7 +389,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
               displayName: 'Main Chat',
               updatedAt: new Date().toISOString(),
             },
-            ...gatewaySessions,
+            ...normalizedSessions,
           ];
 
       if (pendingSessionsRef.current.size > 0) {
@@ -373,6 +426,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
       if (!sessionKey) {
         return;
       }
+      persistSessionTitle(sessionKey, title);
       setSessions((prev) =>
         prev.map((session) =>
           session.sessionKey === sessionKey
@@ -406,7 +460,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
         console.error('Failed to update session title:', err);
       }
     },
-    [applyGatewaySessions]
+    [applyGatewaySessions, persistSessionTitle]
   );
 
   useEffect(() => {
@@ -466,6 +520,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
           const messageId = `${event.runId || 'msg'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
           const assistantMessage: Message = {
             id: messageId,
+            sessionKey: event.sessionKey,
             content: finalText,
             role: 'assistant',
             timestamp: formatTimestamp(),
@@ -555,6 +610,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
     connect();
 
+    const timers = toolRemovalTimersRef.current;
     return () => {
       unsubscribe();
       unsubscribeTool();
@@ -564,8 +620,8 @@ export function useGateway({ userId }: UseGatewayOptions) {
         cancelAnimationFrame(streamFrameRef.current);
         streamFrameRef.current = null;
       }
-      toolRemovalTimersRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
-      toolRemovalTimersRef.current.clear();
+      timers.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      timers.clear();
     };
   }, [userId, applyGatewaySessions]);
 
@@ -588,10 +644,13 @@ export function useGateway({ userId }: UseGatewayOptions) {
           const loaded: Message[] = history.map((msg, idx) => {
             const m = msg as HistoryMessage;
             const blocks = normalizeContentBlocks(m.content);
+            const isToolResult = m.role === 'toolResult' || m.role === 'tool_result';
             return {
               id: `hist_${sessionHash}_${loadTime}_${idx}`,
+              sessionKey: currentSessionKey,
               content: extractTextFromContent(m.content),
               role: m.role === 'user' ? 'user' : 'assistant',
+              isToolResult,
               timestamp: '',
               blocks: blocks.length > 0 ? blocks : undefined,
               sent: true,
@@ -683,6 +742,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
       const userMessage: Message = {
         id: messageId,
+        sessionKey: activeSessionKey,
         content: trimmedText,
         role: 'user',
         timestamp: formatTimestamp(),
@@ -781,7 +841,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
         setIsLoading(false);
       }
     },
-    [currentSessionKey, messages.length, updateSessionTitle, userId, commitDraftSession]
+    [currentSessionKey, messages.length, updateSessionTitle, userId, commitDraftSession, updateMessage]
   );
 
   const retryFileAttachment = useCallback(

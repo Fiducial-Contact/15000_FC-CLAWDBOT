@@ -1,24 +1,9 @@
 import { getPublicKeyAsync, signAsync, utils } from '@noble/ed25519';
-import type { GatewayMessage, ChatEventPayload, SessionEntry, ToolEventPayload } from './types';
+import type { GatewayMessage, ChatEventPayload, SessionEntry, ToolEventPayload, GatewaySkillStatus } from './types';
 
 type Pending = {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
-};
-
-type GatewayEventFrame = {
-  type: 'event';
-  event: string;
-  payload?: unknown;
-  seq?: number;
-};
-
-type GatewayResponseFrame = {
-  type: 'res';
-  id: string;
-  ok: boolean;
-  payload?: unknown;
-  error?: { code?: string; message?: string; details?: unknown };
 };
 
 type GatewayHelloOk = {
@@ -387,6 +372,50 @@ export class GatewayClient {
         }
       }
     }
+
+    if (msg.type === 'event' && msg.event === 'agent') {
+      const agentPayload = msg.payload as {
+        sessionKey?: string;
+        runId?: string;
+        stream?: string;
+        data?: Record<string, unknown>;
+      } | undefined;
+      if (agentPayload?.stream !== 'tool' || !agentPayload.sessionKey) {
+        return;
+      }
+      const data = agentPayload.data ?? {};
+      const toolName =
+        typeof data.toolName === 'string'
+          ? data.toolName
+          : typeof data.name === 'string'
+            ? data.name
+            : 'Tool';
+      const toolCallId =
+        typeof data.toolCallId === 'string'
+          ? data.toolCallId
+          : typeof data.id === 'string'
+            ? data.id
+            : `${agentPayload.runId || 'tool'}:${toolName}`;
+      const phase =
+        typeof data.phase === 'string'
+          ? data.phase
+          : typeof data.state === 'string'
+            ? data.state
+            : 'update';
+      const toolEvent: ToolEventPayload = {
+        runId: agentPayload.runId || '',
+        sessionKey: agentPayload.sessionKey,
+        toolCallId,
+        toolName,
+        phase: phase === 'start' || phase === 'update' || phase === 'end' ? phase : 'update',
+        parameters: (data.args || data.parameters || data.input) as Record<string, unknown> | undefined,
+        output: typeof data.output === 'string' ? data.output : undefined,
+        outputDelta: typeof data.outputDelta === 'string' ? data.outputDelta : undefined,
+        status: data.status as ToolEventPayload['status'] | undefined,
+        error: typeof data.error === 'string' ? data.error : undefined,
+      };
+      this.toolHandlers.forEach(handler => handler(toolEvent));
+    }
   }
 
   private async sendConnectRequest() {
@@ -623,5 +652,22 @@ export class GatewayClient {
 
   isConnected() {
     return this.connected;
+  }
+
+  async skillsStatus(): Promise<GatewaySkillStatus[]> {
+    if (!this.connected) {
+      throw new Error('Not connected to gateway');
+    }
+
+    const result = await this.sendRequest('skills.status', {});
+    const data = result as { skills?: Array<Record<string, unknown>> };
+    if (!Array.isArray(data.skills)) return [];
+
+    return data.skills.map((skill) => ({
+      name: typeof skill.name === 'string' ? skill.name : '',
+      status: (skill.status as GatewaySkillStatus['status']) || 'missing',
+      enabled: typeof skill.enabled === 'boolean' ? skill.enabled : undefined,
+      error: typeof skill.error === 'string' ? skill.error : undefined,
+    }));
   }
 }

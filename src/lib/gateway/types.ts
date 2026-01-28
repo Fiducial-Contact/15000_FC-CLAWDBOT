@@ -125,6 +125,45 @@ export function isThinkingBlock(block: ChatContentBlock): block is ThinkingBlock
   return block.type === 'thinking';
 }
 
+export type SkillSource = 'workspace' | 'bundled' | 'clawdhub';
+export type SkillMetadataStatus = 'active' | 'disabled' | 'draft';
+export type SkillRuntimeStatus = 'ready' | 'missing' | 'disabled' | 'error';
+
+export interface GatewaySkillStatus {
+  name: string;
+  status: SkillRuntimeStatus;
+  enabled?: boolean;
+  error?: string;
+}
+
+export interface SkillRegistryEntry {
+  id: string;
+  skill_name: string;
+  display_name: string | null;
+  description: string | null;
+  creator_id: string | null;
+  creator_email: string | null;
+  source: SkillSource;
+  status: SkillMetadataStatus;
+  icon: string | null;
+  triggers: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MergedSkill {
+  name: string;
+  displayName: string;
+  description: string | null;
+  creatorEmail: string | null;
+  source: SkillSource;
+  icon: string | null;
+  triggers: string[];
+  runtimeStatus: SkillRuntimeStatus;
+  metadataStatus: SkillMetadataStatus;
+  error?: string;
+}
+
 export type ToolEventPhase = 'start' | 'update' | 'end';
 
 export interface ToolEventPayload {

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Mic, Globe, Paperclip, Send, Square, FileText, X, Upload, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { ChatAttachmentInput } from '@/lib/gateway/types';
+import { AnimatedText } from '@/components/AnimatedText';
 
 const PLACEHOLDERS = [
   'How do I export 4K ProRes from Premiere?',
@@ -31,40 +32,6 @@ interface ChatInputProps {
   disabled?: boolean;
   isLoading?: boolean;
 }
-
-const placeholderContainerVariants = {
-  initial: {},
-  animate: { transition: { staggerChildren: 0.025 } },
-  exit: { transition: { staggerChildren: 0.015, staggerDirection: -1 as const } },
-};
-
-const letterVariants = {
-  initial: {
-    opacity: 0,
-    filter: 'blur(12px)',
-    y: 10,
-  },
-  animate: {
-    opacity: 1,
-    filter: 'blur(0px)',
-    y: 0,
-    transition: {
-      opacity: { duration: 0.25 },
-      filter: { duration: 0.4 },
-      y: { type: 'spring' as const, stiffness: 80, damping: 20 },
-    },
-  },
-  exit: {
-    opacity: 0,
-    filter: 'blur(12px)',
-    y: -10,
-    transition: {
-      opacity: { duration: 0.2 },
-      filter: { duration: 0.3 },
-      y: { type: 'spring' as const, stiffness: 80, damping: 20 },
-    },
-  },
-};
 
 export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputProps) {
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -356,30 +323,11 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputPro
           
           {/* Animated Placeholder */}
           <div className="absolute left-4 top-3 pointer-events-none flex items-center">
-            <AnimatePresence mode="wait">
-              {showPlaceholder && !isFocused && !inputValue && (
-                <motion.span
-                  key={placeholderIndex}
-                  className="text-[var(--fc-light-gray)] text-[15px] select-none"
-                  variants={placeholderContainerVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                >
-                  {PLACEHOLDERS[placeholderIndex]
-                    .split('')
-                    .map((char, i) => (
-                      <motion.span
-                        key={i}
-                        variants={letterVariants}
-                        style={{ display: 'inline-block' }}
-                      >
-                        {char === ' ' ? '\u00A0' : char}
-                      </motion.span>
-                    ))}
-                </motion.span>
-              )}
-            </AnimatePresence>
+            <AnimatedText
+              text={PLACEHOLDERS[placeholderIndex]}
+              isVisible={showPlaceholder && !isFocused && !inputValue}
+              className="text-[var(--fc-light-gray)] text-[15px] select-none"
+            />
           </div>
         </div>
 

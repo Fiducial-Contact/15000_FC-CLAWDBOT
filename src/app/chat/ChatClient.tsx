@@ -16,6 +16,8 @@ import {
   Sparkles,
   AlertCircle,
   Zap,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useGateway } from '@/lib/gateway/useGateway';
@@ -26,6 +28,7 @@ import { ChatSidebar } from '@/components/ChatSidebar';
 import { CapabilityCard } from '@/components/CapabilityCard';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { ToolCard } from '@/components/ToolCard';
+import { AnimatedText } from '@/components/AnimatedText';
 import type { ChatAttachmentInput } from '@/lib/gateway/types';
 
 interface ChatClientProps {
@@ -147,6 +150,18 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const isAutoScrollRef = useRef(true);
   const lastMessageCountRef = useRef(0);
   const lastStreamLengthRef = useRef(0);
+  const [sessionCopied, setSessionCopied] = useState(false);
+  const [showDetails, setShowDetails] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('fc-chat-show-details');
+        return stored === 'true';
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
 
   const {
     messages,
@@ -169,6 +184,45 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     abortChat,
   } = useGateway({ userId });
 
+  const isNoiseText = useCallback((text: string) => {
+    const content = text.trim().toLowerCase();
+    if (!content) return false;
+    const noisePatterns = [
+      /\(no new output\)/i,
+      /process still running/i,
+      /command still running/i,
+      /use process \(list\/poll\/log\/write\/kill\/clear\/remove\) for follow-up/i,
+    ];
+    if (!noisePatterns.some((pattern) => pattern.test(content))) {
+      return false;
+    }
+    const stripped = noisePatterns.reduce((acc, pattern) => acc.replace(pattern, ' '), content);
+    return stripped.replace(/[^a-z0-9]+/g, '').length === 0;
+  }, []);
+
+  const visibleMessages = useMemo(() => {
+    const sessionMessages = messages.filter((message) => message.sessionKey === currentSessionKey);
+    if (showDetails) return sessionMessages;
+    return sessionMessages.filter((message) => {
+      if (message.role !== 'assistant') return true;
+      if (message.isToolResult) return false;
+      if (message.attachments && message.attachments.length > 0) return true;
+      const blocks = message.blocks || [];
+      const hasImageBlock = blocks.some((block) => block.type === 'image' || block.type === 'image_url');
+      if (hasImageBlock) return true;
+      const hasToolBlock = blocks.some((block) => block.type === 'toolCall' || block.type === 'tool_call');
+      if (hasToolBlock) return false;
+      const hasThinkingOnly = blocks.length > 0 && blocks.every((block) => block.type === 'thinking');
+      if (hasThinkingOnly && !message.content.trim()) return false;
+      return !isNoiseText(message.content || '');
+    });
+  }, [messages, currentSessionKey, showDetails, isNoiseText]);
+
+  const displayStreamingContent = useMemo(() => {
+    if (showDetails) return streamingContent;
+    return isNoiseText(streamingContent) ? '' : streamingContent;
+  }, [streamingContent, showDetails, isNoiseText]);
+
   const allSuggestions = useMemo(() => {
     return CAPABILITY_CATEGORIES.flatMap((cat) => cat.suggestions);
   }, []);
@@ -188,8 +242,8 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   }, []);
 
   useEffect(() => {
-    const hasNewMessage = messages.length > lastMessageCountRef.current;
-    const streamLength = streamingContent.length;
+    const hasNewMessage = visibleMessages.length > lastMessageCountRef.current;
+    const streamLength = displayStreamingContent.length;
     const streamingGrowing = streamLength > lastStreamLengthRef.current;
 
     if (hasNewMessage) {
@@ -198,11 +252,19 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       scrollToBottom('auto');
     }
 
-    lastMessageCountRef.current = messages.length;
+    lastMessageCountRef.current = visibleMessages.length;
     lastStreamLengthRef.current = streamLength;
-  }, [messages.length, streamingContent, scrollToBottom]);
+  }, [visibleMessages.length, displayStreamingContent, scrollToBottom]);
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('fc-chat-show-details', String(showDetails));
+    } catch {
+      // ignore storage errors
+    }
+  }, [showDetails]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -238,7 +300,73 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     handleSuggestionClick(allSuggestions[randomIndex]);
   };
 
-  const isEmpty = (messages.length === 0 && !streamingContent) || isDraftSession;
+  const buildSessionText = useCallback(() => {
+    const lines: string[] = [];
+    for (const message of visibleMessages) {
+      const role = message.role === 'user' ? 'You' : 'Assistant';
+      const header = message.timestamp ? `[${message.timestamp}] ${role}` : role;
+      lines.push(header);
+      if (message.content) {
+        lines.push(message.content);
+      }
+      if (showDetails && message.blocks && message.blocks.length > 0) {
+        message.blocks.forEach((block) => {
+          if (block.type === 'thinking' && typeof block.text === 'string' && block.text.trim()) {
+            lines.push(`[Thinking]\n${block.text}`);
+          }
+          if (block.type === 'toolCall') {
+            const toolName =
+              typeof block.toolName === 'string'
+                ? block.toolName
+                : typeof block.name === 'string'
+                  ? block.name
+                  : 'Tool';
+            lines.push(`[Tool] ${toolName}`);
+            if (block.parameters) {
+              lines.push(`[Tool Params]\n${JSON.stringify(block.parameters, null, 2)}`);
+            }
+            if (block.result) {
+              lines.push(
+                `[Tool Result]\n${
+                  typeof block.result === 'string'
+                    ? block.result
+                    : JSON.stringify(block.result, null, 2)
+                }`
+              );
+            }
+          }
+          if (block.type === 'image_url' && typeof block.url === 'string') {
+            lines.push(`[Image] ${block.url}`);
+          }
+        });
+      }
+      if (message.attachments && message.attachments.length > 0) {
+        message.attachments.forEach((file) => {
+          const url = file.url || file.previewUrl;
+          lines.push(`[Attachment] ${file.fileName}${url ? ` — ${url}` : ''}`);
+        });
+      }
+      lines.push('');
+    }
+    if (displayStreamingContent) {
+      lines.push(`[Assistant - streaming]\n${displayStreamingContent}`);
+    }
+    return lines.join('\n').trim();
+  }, [visibleMessages, displayStreamingContent, showDetails]);
+
+  const handleCopySession = useCallback(async () => {
+    const text = buildSessionText();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setSessionCopied(true);
+      window.setTimeout(() => setSessionCopied(false), 1500);
+    } catch (err) {
+      console.error('Failed to copy session:', err);
+    }
+  }, [buildSessionText]);
+
+  const isEmpty = (visibleMessages.length === 0 && !displayStreamingContent) || isDraftSession;
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-[var(--fc-off-white)] to-white">
@@ -278,6 +406,32 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
             )}
           </AnimatePresence>
 
+          {/* Session Actions */}
+          <div className="px-4 md:px-6 py-3 flex items-center justify-between border-b border-[var(--fc-border-gray)] bg-white/70 backdrop-blur">
+            <button
+              type="button"
+              onClick={() => setShowDetails((prev) => !prev)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                showDetails
+                  ? 'bg-[var(--fc-subtle-gray)] text-[var(--fc-black)] border-[var(--fc-border-gray)]'
+                  : 'bg-white text-[var(--fc-body-gray)] border-[var(--fc-border-gray)] hover:text-[var(--fc-black)]'
+              }`}
+              aria-pressed={showDetails}
+            >
+              Details: {showDetails ? 'On' : 'Off'}
+            </button>
+
+            <button
+              onClick={handleCopySession}
+              disabled={!visibleMessages.length && !displayStreamingContent}
+              className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Copy entire session"
+            >
+              {sessionCopied ? <Check size={12} /> : <Copy size={12} />}
+              {sessionCopied ? 'Copied' : 'Copy session'}
+            </button>
+          </div>
+
           {/* Messages Area */}
           <div
             ref={scrollContainerRef}
@@ -310,7 +464,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
                     {/* 主标题 */}
                     <h1 className="text-3xl md:text-4xl font-bold text-[var(--fc-black)] mb-3 tracking-tight">
-                      Hey! I'm Haiweis unpaid intern.
+                      Hey! I&apos;m Haiweis unpaid intern.
                     </h1>
 
                     {/* 副标题 */}
@@ -328,7 +482,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                   {/* Capability Bento Grid */}
                   <div className="mb-8">
                     <p className="text-[15px] font-semibold tracking-tight text-[var(--fc-body-gray)] mb-4 text-center font-[family-name:var(--font-manrope)]">
-                      Here's what I can help you with:
+                      Here&apos;s what I can help you with:
                     </p>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -397,7 +551,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                 </motion.div>
               ) : (
                 <div className="space-y-2 pb-4">
-                  {messages.map((message) => (
+                  {visibleMessages.map((message) => (
                     <ChatMessage
                       key={message.id}
                       messageId={message.id}
@@ -407,18 +561,20 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                       role={message.role}
                       timestamp={message.timestamp}
                       onRetryAttachment={retryFileAttachment}
+                      showThinking={showDetails}
+                      showTools={showDetails}
                     />
                   ))}
 
-                  {streamingContent && (
+                  {displayStreamingContent && (
                     <ChatMessage
                       messageId="stream"
-                      content={streamingContent}
+                      content={displayStreamingContent}
                       role="assistant"
                     />
                   )}
 
-                  {activeTools.size > 0 && (
+                  {showDetails && activeTools.size > 0 && (
                     <motion.div
                       className="space-y-2 pl-12"
                       initial={{ opacity: 0 }}
@@ -438,27 +594,13 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                     </motion.div>
                   )}
 
-                  {isLoading && !streamingContent && (
+                  {isLoading && !displayStreamingContent && (
                     <motion.div
                       className="flex items-center gap-3 text-[var(--fc-body-gray)] pl-12"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                     >
-                      <div className="flex gap-1">
-                        {[0, 1, 2].map((i) => (
-                          <motion.span
-                            key={i}
-                            className="w-2 h-2 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] rounded-full"
-                            animate={{ y: [0, -6, 0] }}
-                            transition={{
-                              duration: 0.6,
-                              repeat: Infinity,
-                              delay: i * 0.15,
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <span className="text-sm">Thinking...</span>
+                      <AnimatedText text="Thinking..." className="text-sm text-[var(--fc-body-gray)]" />
                     </motion.div>
                   )}
                 </div>

@@ -2,7 +2,8 @@
 
 import { memo, useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
-import { LogOut, Sparkles, ChevronDown, KeyRound } from 'lucide-react';
+import Link from 'next/link';
+import { LogOut, Sparkles, ChevronDown, KeyRound, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface HeaderProps {
@@ -55,6 +56,14 @@ export const Header = memo(function Header({ userName, onLogout, onChangePasswor
                 AI Agent
               </span>
             </div>
+            <div className="h-4 w-px bg-[var(--fc-border-gray)]" />
+            <Link
+              href="/skills"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-[var(--fc-body-gray)] hover:text-[var(--fc-dark-gray)] hover:bg-[var(--fc-subtle-gray)] transition-colors"
+            >
+              <Zap size={12} />
+              Skills
+            </Link>
           </div>
         </div>
 

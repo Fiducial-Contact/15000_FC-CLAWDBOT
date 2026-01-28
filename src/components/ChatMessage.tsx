@@ -19,6 +19,8 @@ interface ChatMessageProps {
   timestamp?: string;
   blocks?: ChatContentBlock[];
   attachments?: ChatAttachment[];
+  showThinking?: boolean;
+  showTools?: boolean;
   onRetryAttachment?: (messageId: string, attachmentId: string) => void;
 }
 
@@ -569,6 +571,8 @@ export const ChatMessage = memo(function ChatMessage({
   timestamp,
   blocks,
   attachments,
+  showThinking = false,
+  showTools = false,
   onRetryAttachment,
 }: ChatMessageProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -653,7 +657,7 @@ export const ChatMessage = memo(function ChatMessage({
                 : 'bg-white text-[var(--fc-black)] rounded-2xl rounded-tl-sm shadow-sm border border-[var(--fc-border-gray)]'
             }`}
           >
-            {!isUser && thinkingBlocks.length > 0 && (
+            {!isUser && showThinking && thinkingBlocks.length > 0 && (
               <div className="space-y-2 mb-3">
                 {thinkingBlocks.map((block, idx) => (
                   <ThinkingBlock key={idx} text={block.text || ''} />
@@ -697,7 +701,7 @@ export const ChatMessage = memo(function ChatMessage({
                 </div>
               )
             ) : null}
-            {!isUser && toolCallBlocks.length > 0 && (
+            {!isUser && showTools && toolCallBlocks.length > 0 && (
               <div className="space-y-2 mt-3">
                 {toolCallBlocks.map((block, idx) => (
                   <ToolCard
