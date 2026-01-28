@@ -159,15 +159,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const lastMessageCountRef = useRef(0);
   const lastStreamLengthRef = useRef(0);
   const [sessionCopied, setSessionCopied] = useState(false);
-  const [showDetails, setShowDetails] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      const stored = localStorage.getItem('fc-chat-show-details');
-      return stored === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [showDetails, setShowDetails] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [showThinkingText, setShowThinkingText] = useState(true);
 
@@ -278,6 +270,18 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   }, [visibleMessages.length, displayStreamingContent, scrollToBottom]);
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('fc-chat-show-details');
+      if (stored !== null) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setShowDetails(stored === 'true');
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
 
   useEffect(() => {
     try {

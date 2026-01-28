@@ -41,9 +41,9 @@ function mergeSkillsData(
     merged.push({
       name,
       displayName: meta?.display_name || name,
-      description: meta?.description || null,
+      description: meta?.description || gateway?.description || null,
       creatorEmail: meta?.creator_email || null,
-      source: (meta?.source as SkillSource) || 'workspace',
+      source: (meta?.source as SkillSource) || gateway?.source || 'workspace',
       icon: meta?.icon || null,
       triggers: meta?.triggers || [],
       runtimeStatus: gateway?.status || 'missing',

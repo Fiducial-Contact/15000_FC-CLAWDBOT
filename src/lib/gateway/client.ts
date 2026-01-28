@@ -290,6 +290,66 @@ export class GatewayClient {
 
   constructor(private opts: GatewayClientOptions) {}
 
+  private normalizeToolEvent(raw: unknown): ToolEventPayload | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const payload = raw as Record<string, unknown>;
+    const sessionKey = payload.sessionKey as string | undefined;
+    if (!sessionKey) return null;
+    const runId = (payload.runId as string | undefined) ?? '';
+    const toolName =
+      (payload.toolName as string | undefined) ||
+      (payload.name as string | undefined) ||
+      (payload.tool as string | undefined) ||
+      'Tool';
+    const rawToolCallId =
+      (payload.toolCallId as string | undefined) ||
+      (payload.callId as string | undefined) ||
+      (payload.id as string | undefined) ||
+      (payload.toolId as string | undefined);
+    const toolCallId = rawToolCallId || `${runId || 'tool'}:${toolName}`;
+    const phaseRaw =
+      (payload.phase as string | undefined) ||
+      (payload.state as string | undefined) ||
+      (payload.status as string | undefined) ||
+      'update';
+    const phase =
+      phaseRaw === 'start' || phaseRaw === 'update' || phaseRaw === 'end'
+        ? phaseRaw
+        : phaseRaw === 'complete' ||
+            phaseRaw === 'completed' ||
+            phaseRaw === 'done' ||
+            phaseRaw === 'finish' ||
+            phaseRaw === 'finished'
+          ? 'end'
+          : 'update';
+    const outputDelta =
+      (payload.outputDelta as string | undefined) ||
+      (payload.delta as string | undefined);
+    const outputRaw = payload.output ?? payload.result ?? payload.text;
+    const output =
+      typeof outputRaw === 'string'
+        ? outputRaw
+        : outputRaw
+          ? JSON.stringify(outputRaw)
+          : undefined;
+    const error =
+      (payload.error as string | undefined) ||
+      (payload.errorMessage as string | undefined);
+
+    return {
+      runId,
+      sessionKey,
+      toolCallId,
+      toolName,
+      phase,
+      parameters: (payload.args || payload.parameters || payload.input) as Record<string, unknown> | undefined,
+      output,
+      outputDelta,
+      status: payload.status as ToolEventPayload['status'] | undefined,
+      error,
+    };
+  }
+
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.connectResolve = resolve;
@@ -357,8 +417,8 @@ export class GatewayClient {
     }
 
     if (msg.type === 'event' && msg.event === 'tool') {
-      const payload = msg.payload as ToolEventPayload;
-      if (payload?.sessionKey) {
+      const payload = this.normalizeToolEvent(msg.payload);
+      if (payload) {
         this.toolHandlers.forEach(handler => handler(payload));
       }
     }
@@ -366,8 +426,8 @@ export class GatewayClient {
     if (msg.type === 'event' && msg.event === 'stream') {
       const streamPayload = msg.payload as { stream?: string; payload?: unknown } | undefined;
       if (streamPayload?.stream === 'tool') {
-        const payload = streamPayload.payload as ToolEventPayload;
-        if (payload?.sessionKey) {
+        const payload = this.normalizeToolEvent(streamPayload.payload);
+        if (payload) {
           this.toolHandlers.forEach(handler => handler(payload));
         }
       }
@@ -383,38 +443,11 @@ export class GatewayClient {
       if (agentPayload?.stream !== 'tool' || !agentPayload.sessionKey) {
         return;
       }
-      const data = agentPayload.data ?? {};
-      const toolName =
-        typeof data.toolName === 'string'
-          ? data.toolName
-          : typeof data.name === 'string'
-            ? data.name
-            : 'Tool';
-      const toolCallId =
-        typeof data.toolCallId === 'string'
-          ? data.toolCallId
-          : typeof data.id === 'string'
-            ? data.id
-            : `${agentPayload.runId || 'tool'}:${toolName}`;
-      const phase =
-        typeof data.phase === 'string'
-          ? data.phase
-          : typeof data.state === 'string'
-            ? data.state
-            : 'update';
-      const toolEvent: ToolEventPayload = {
-        runId: agentPayload.runId || '',
-        sessionKey: agentPayload.sessionKey,
-        toolCallId,
-        toolName,
-        phase: phase === 'start' || phase === 'update' || phase === 'end' ? phase : 'update',
-        parameters: (data.args || data.parameters || data.input) as Record<string, unknown> | undefined,
-        output: typeof data.output === 'string' ? data.output : undefined,
-        outputDelta: typeof data.outputDelta === 'string' ? data.outputDelta : undefined,
-        status: data.status as ToolEventPayload['status'] | undefined,
-        error: typeof data.error === 'string' ? data.error : undefined,
-      };
-      this.toolHandlers.forEach(handler => handler(toolEvent));
+      const merged = { ...(agentPayload.data ?? {}), sessionKey: agentPayload.sessionKey, runId: agentPayload.runId };
+      const toolEvent = this.normalizeToolEvent(merged);
+      if (toolEvent) {
+        this.toolHandlers.forEach(handler => handler(toolEvent));
+      }
     }
   }
 
@@ -663,11 +696,36 @@ export class GatewayClient {
     const data = result as { skills?: Array<Record<string, unknown>> };
     if (!Array.isArray(data.skills)) return [];
 
-    return data.skills.map((skill) => ({
-      name: typeof skill.name === 'string' ? skill.name : '',
-      status: (skill.status as GatewaySkillStatus['status']) || 'missing',
-      enabled: typeof skill.enabled === 'boolean' ? skill.enabled : undefined,
-      error: typeof skill.error === 'string' ? skill.error : undefined,
-    }));
+    const resolveSource = (value: unknown): GatewaySkillStatus['source'] => {
+      if (typeof value !== 'string') return undefined;
+      if (value.includes('bundled')) return 'bundled';
+      if (value.includes('workspace')) return 'workspace';
+      if (value.includes('clawdhub')) return 'clawdhub';
+      return undefined;
+    };
+
+    const resolveStatus = (skill: Record<string, unknown>): GatewaySkillStatus['status'] => {
+      const error = typeof skill.error === 'string' ? skill.error : undefined;
+      if (error) return 'error';
+
+      const disabled = skill.disabled === true || skill.blockedByAllowlist === true;
+      if (disabled) return 'disabled';
+
+      if (skill.eligible === true) return 'ready';
+      return 'missing';
+    };
+
+    return data.skills.map((skill) => {
+      const name = typeof skill.name === 'string' ? skill.name : '';
+      const status = resolveStatus(skill);
+      return {
+        name,
+        status,
+        enabled: typeof skill.enabled === 'boolean' ? skill.enabled : undefined,
+        error: typeof skill.error === 'string' ? skill.error : undefined,
+        source: resolveSource(skill.source),
+        description: typeof skill.description === 'string' ? skill.description : undefined,
+      };
+    });
   }
 }

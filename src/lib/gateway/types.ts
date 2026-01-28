@@ -134,6 +134,8 @@ export interface GatewaySkillStatus {
   status: SkillRuntimeStatus;
   enabled?: boolean;
   error?: string;
+  source?: SkillSource;
+  description?: string;
 }
 
 export interface SkillRegistryEntry {
