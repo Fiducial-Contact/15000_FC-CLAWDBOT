@@ -167,33 +167,27 @@ function generateSessionTitle(message: string): string {
   return cleaned.slice(0, 30).trim() + '...';
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      const base64 = result.split(',')[1] || '';
-      resolve(base64);
-    };
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function buildFileUrlText(entries: Array<{ name: string; url: string }>) {
   if (entries.length === 0) return '';
   return entries.map((entry) => `File: ${entry.name}\nURL: ${entry.url}`).join('\n');
 }
 
+function buildImageUrlText(entries: Array<{ name: string; url: string }>) {
+  if (entries.length === 0) return '';
+  return entries.map((entry) => `Image: ${entry.name}\nURL: ${entry.url}`).join('\n');
+}
+
 function buildOutboundText(params: {
   text: string;
+  imageUrlText: string;
   fileUrlText: string;
   hasImages: boolean;
   hasFiles: boolean;
 }) {
-  const { text, fileUrlText, hasImages, hasFiles } = params;
+  const { text, imageUrlText, fileUrlText, hasImages, hasFiles } = params;
   const outboundParts: string[] = [];
   if (text) outboundParts.push(text);
+  if (imageUrlText) outboundParts.push(imageUrlText);
   if (fileUrlText) outboundParts.push(fileUrlText);
   const fallbackText = hasImages && !hasFiles ? 'Attached image(s).' : 'Attached file(s).';
   return outboundParts.join('\n\n') || fallbackText;
@@ -241,6 +235,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
   });
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingHistoryKey, setLoadingHistoryKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -650,6 +645,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
     }
 
     const loadHistory = async () => {
+      setLoadingHistoryKey(currentSessionKey);
       try {
         const history = await clientRef.current!.getHistory(currentSessionKey);
         if (Array.isArray(history) && history.length > 0) {
@@ -682,7 +678,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
             };
           });
           setMessages(loaded);
-          
+
           const firstUserMsg = loaded.find((m) => m.role === 'user');
           const sessionEntry = sessionsRef.current.find(
             (session) => session.sessionKey === currentSessionKey
@@ -702,6 +698,8 @@ export function useGateway({ userId }: UseGatewayOptions) {
       } catch (err) {
         console.error('Failed to load history:', err);
         setMessages([]);
+      } finally {
+        setLoadingHistoryKey(null);
       }
     };
 
@@ -790,7 +788,51 @@ export function useGateway({ userId }: UseGatewayOptions) {
         }
       }
 
+      let imageUrlText = '';
       let fileUrlText = '';
+      if (imageInputs.length > 0) {
+        try {
+          const uploadResults = await Promise.all(
+            imageInputs.map(async (item) => {
+              const upload = await uploadFileAndCreateSignedUrl({
+                file: item.file,
+                userId,
+              });
+              return { id: item.id, url: upload.signedUrl, name: item.file.name };
+            })
+          );
+
+          const urlById = new Map(uploadResults.map((result) => [result.id, result.url]));
+          const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) => {
+            if (item.kind !== 'image') return item;
+            const url = urlById.get(item.id);
+            return { ...item, url, status: url ? 'ready' : 'error' };
+          });
+
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === messageId ? { ...message, attachments: updatedAttachments } : message
+            )
+          );
+
+          imageUrlText = buildImageUrlText(
+            uploadResults.map((result) => ({ name: result.name, url: result.url }))
+          );
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to upload image');
+          const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) =>
+            item.kind === 'image' ? { ...item, status: 'error' } : item
+          );
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === messageId ? { ...message, attachments: updatedAttachments } : message
+            )
+          );
+          setIsLoading(false);
+          return;
+        }
+      }
+
       if (fileInputs.length > 0) {
         try {
           const uploadResults = await Promise.all(
@@ -837,21 +879,12 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
       const outboundText = buildOutboundText({
         text: trimmedText,
+        imageUrlText,
         fileUrlText,
         hasImages: imageInputs.length > 0,
         hasFiles: fileInputs.length > 0,
       });
-
-      const gatewayAttachments = imageInputs.length
-        ? await Promise.all(
-            imageInputs.map(async (item) => ({
-              type: 'image' as const,
-              mimeType: item.file.type || 'image/png',
-              fileName: item.file.name,
-              content: await fileToBase64(item.file),
-            }))
-          )
-        : undefined;
+      const gatewayAttachments = undefined;
 
       try {
         const idempotencyKey = crypto.randomUUID();
@@ -937,24 +970,19 @@ export function useGateway({ userId }: UseGatewayOptions) {
       const fileEntries = updatedAttachments
         .filter((item) => item.kind === 'file' && item.url)
         .map((item) => ({ name: item.fileName, url: item.url! }));
+      const imageEntries = updatedAttachments
+        .filter((item) => item.kind === 'image' && item.url)
+        .map((item) => ({ name: item.fileName, url: item.url! }));
       const fileUrlText = buildFileUrlText(fileEntries);
+      const imageUrlText = buildImageUrlText(imageEntries);
       const outboundText = buildOutboundText({
         text: message.content.trim(),
+        imageUrlText,
         fileUrlText,
         hasImages: imageInputs.length > 0,
         hasFiles: updatedAttachments.some((item) => item.kind === 'file'),
       });
-
-      const gatewayAttachments = imageInputs.length
-        ? await Promise.all(
-            imageInputs.map(async (item) => ({
-              type: 'image' as const,
-              mimeType: item.mimeType || item.file?.type || 'image/png',
-              fileName: item.fileName,
-              content: await fileToBase64(item.file!),
-            }))
-          )
-        : undefined;
+      const gatewayAttachments = undefined;
 
       try {
         const idempotencyKey = crypto.randomUUID();
@@ -1061,6 +1089,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
     mainSessionKey,
     isConnected,
     isLoading,
+    loadingHistoryKey,
     error,
     streamingContent,
     isSidebarOpen,

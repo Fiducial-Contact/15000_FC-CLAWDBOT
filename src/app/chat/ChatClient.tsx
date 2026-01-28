@@ -170,6 +170,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     mainSessionKey,
     isConnected,
     isLoading,
+    loadingHistoryKey,
     error,
     streamingContent,
     isSidebarOpen,
@@ -391,7 +392,8 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     }
   }, [buildSessionText]);
 
-  const isEmpty = (visibleMessages.length === 0 && !displayStreamingContent) || isDraftSession;
+  const isLoadingHistory = loadingHistoryKey === currentSessionKey && visibleMessages.length === 0;
+  const isEmpty = ((visibleMessages.length === 0 && !displayStreamingContent) || isDraftSession) && !isLoadingHistory;
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-[var(--fc-off-white)] to-white">
@@ -464,7 +466,23 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
             onScroll={handleScroll}
           >
             <div className="max-w-3xl mx-auto px-4 py-6">
-              {isEmpty ? (
+              {isLoadingHistory ? (
+                <div className="space-y-6 py-8 animate-pulse">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className={`flex gap-3 ${i % 2 === 0 ? 'flex-row-reverse' : 'flex-row'}`}>
+                      <div className="w-8 h-8 rounded-xl bg-zinc-200 flex-shrink-0" />
+                      <div className={`flex flex-col ${i % 2 === 0 ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                        <div className="w-12 h-3 bg-zinc-100 rounded mb-2" />
+                        <div className={`rounded-2xl ${i % 2 === 0 ? 'bg-zinc-300 rounded-tr-sm' : 'bg-zinc-100 rounded-tl-sm'} p-4 space-y-2`}>
+                          <div className="h-3 bg-zinc-200 rounded w-48" />
+                          <div className="h-3 bg-zinc-200 rounded w-32" />
+                          {i % 2 !== 0 && <div className="h-3 bg-zinc-200 rounded w-56" />}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : isEmpty ? (
                 <motion.div
                   className="min-h-[calc(100vh-280px)] flex flex-col justify-center"
                   initial={{ opacity: 0 }}
