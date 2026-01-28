@@ -14,7 +14,7 @@ const PLACEHOLDERS = [
   'Explain LUTs vs color correction',
 ];
 
-const IMAGE_MAX_MB = Number(process.env.NEXT_PUBLIC_CHAT_IMAGE_MAX_MB) || 5;
+const IMAGE_MAX_MB = Number(process.env.NEXT_PUBLIC_CHAT_IMAGE_MAX_MB) || 10;
 const FILE_MAX_MB = Number(process.env.NEXT_PUBLIC_CHAT_FILE_MAX_MB) || 50;
 const IMAGE_MAX_BYTES = IMAGE_MAX_MB * 1024 * 1024;
 const FILE_MAX_BYTES = FILE_MAX_MB * 1024 * 1024;
@@ -24,6 +24,15 @@ function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 interface ChatInputProps {
@@ -74,29 +83,37 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputPro
 
   const hasContent = inputValue.trim().length > 0 || attachments.length > 0;
 
-  const addFiles = useCallback((fileList: FileList | File[]) => {
+  const addFiles = useCallback(async (fileList: FileList | File[]) => {
     const files = Array.from(fileList);
     if (files.length === 0) return;
 
     const errors: string[] = [];
     const next: ChatAttachmentInput[] = [];
 
-    files.forEach((file) => {
+    for (const file of files) {
       const isImage = file.type.startsWith('image/');
       const maxBytes = isImage ? IMAGE_MAX_BYTES : FILE_MAX_BYTES;
       if (file.size > maxBytes) {
         errors.push(`${file.name} exceeds the ${isImage ? IMAGE_MAX_MB : FILE_MAX_MB}MB limit.`);
-        return;
+        continue;
       }
 
-      const previewUrl = isImage ? URL.createObjectURL(file) : undefined;
+      let previewUrl: string | undefined;
+      if (isImage) {
+        try {
+          previewUrl = await fileToDataUrl(file);
+        } catch {
+          previewUrl = undefined;
+        }
+      }
+
       next.push({
         id: crypto.randomUUID(),
         file,
         kind: isImage ? 'image' : 'file',
         previewUrl,
       });
-    });
+    }
 
     if (next.length > 0) {
       setAttachments((prev) => [...prev, ...next]);
@@ -166,7 +183,7 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputPro
     setAttachments((prev) => {
       const next = prev.filter((item) => item.id !== id);
       const removed = prev.find((item) => item.id === id);
-      if (removed?.previewUrl) {
+      if (removed?.previewUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(removed.previewUrl);
       }
       return next;
@@ -176,7 +193,7 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading }: ChatInputPro
 
   const clearAttachments = useCallback(() => {
     attachments.forEach((item) => {
-      if (item.previewUrl) {
+      if (item.previewUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(item.previewUrl);
       }
     });
