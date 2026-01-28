@@ -59,6 +59,7 @@ export interface SessionEntry {
   updatedAt?: string;
   createdAt?: string;
   displayName?: string;
+  label?: string;
   channel?: string;
   origin?: SessionOrigin;
   inputTokens?: number;

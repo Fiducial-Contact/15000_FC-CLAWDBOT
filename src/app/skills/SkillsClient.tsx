@@ -1,34 +1,54 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, WifiOff, Loader2, Sparkles, ArrowLeft } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import {
+  RefreshCw,
+  WifiOff,
+  Loader2,
+  Search,
+  ArrowLeft,
+  Filter,
+  LayoutGrid,
+  List as ListIcon,
+  Server
+} from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'motion/react';
 import { GatewayClient } from '@/lib/gateway/client';
 import { useSkills } from '@/lib/gateway/useSkills';
 import { SkillCard } from '@/components/SkillCard';
 import { Header } from '@/components/Header';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import type { MergedSkill } from '@/lib/gateway/types';
 
 interface SkillsClientProps {
   userEmail: string;
   userId: string;
 }
 
+type FilterStatus = 'all' | 'ready' | 'disabled' | 'error' | 'missing';
+
 export function SkillsClient({ userEmail, userId }: SkillsClientProps) {
   const router = useRouter();
   const wsUrl = process.env.NEXT_PUBLIC_GATEWAY_WS_URL;
   const token = process.env.NEXT_PUBLIC_GATEWAY_TOKEN;
+
+  // State
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(() =>
     wsUrl ? null : 'Gateway URL not configured'
   );
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterStatus>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // Prepared for future list view
+
   const clientRef = useRef<GatewayClient | null>(null);
 
+  // Connection Logic
   useEffect(() => {
-    if (!wsUrl) {
-      return;
-    }
+    if (!wsUrl) return;
 
     const client = new GatewayClient({
       url: wsUrl,
@@ -84,88 +104,190 @@ export function SkillsClient({ userEmail, userId }: SkillsClientProps) {
     }
   }, [isConnected, refresh]);
 
+  // Filtering Logic
+  const filteredSkills = useMemo(() => {
+    return skills.filter(skill => {
+      const matchesSearch =
+        skill.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        skill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (skill.description && skill.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const matchesFilter = activeFilter === 'all' || skill.runtimeStatus === activeFilter;
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [skills, searchQuery, activeFilter]);
+
+  // Counts for tabs
+  const getCount = (status: FilterStatus) => {
+    if (status === 'all') return skills.length;
+    return skills.filter(s => s.runtimeStatus === status).length;
+  };
+
   return (
-    <div className="min-h-screen bg-[var(--fc-page-bg)]">
+    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900">
       <Header userName={userEmail} onLogout={handleLogout} />
 
-      <main className="max-w-6xl mx-auto px-4 md:px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/chat"
-              className="flex items-center gap-2 text-sm text-[var(--fc-body-gray)] hover:text-[var(--fc-dark-gray)] transition-colors"
-            >
-              <ArrowLeft size={16} />
-              Back to Chat
-            </Link>
-            <div className="h-4 w-px bg-[var(--fc-border-gray)]" />
-            <div className="flex items-center gap-2">
-              <Sparkles size={20} className="text-[var(--fc-action-red)]" />
-              <h1 className="text-xl font-semibold text-[var(--fc-black)]">Skills</h1>
+      <main className="max-w-7xl mx-auto px-4 md:px-8 py-8">
+
+        {/* Page Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 mb-2">
+              <Link
+                href="/chat"
+                className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 transition-colors"
+              >
+                <ArrowLeft size={14} />
+                Back to Chat
+              </Link>
             </div>
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Skill Library</h1>
+            <p className="text-zinc-500">Manage and view available capabilities for your agents.</p>
           </div>
 
-          <button
-            onClick={handleRefresh}
-            disabled={!isConnected || isLoading}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[var(--fc-dark-gray)] bg-white border border-[var(--fc-border-gray)] rounded-lg hover:bg-[var(--fc-subtle-gray)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className={`absolute left-0 bottom-0 top-[2px] w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
+              <span className="pl-4 text-xs font-medium text-zinc-600">
+                {isConnected ? 'Gateway Connected' : 'Gateway Disconnected'}
+              </span>
+            </div>
+
+            <button
+              onClick={handleRefresh}
+              disabled={!isConnected || isLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50 hover:border-zinc-300 transition-all disabled:opacity-50 shadow-sm"
+            >
+              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
         </div>
 
-        {!isConnected && !connectionError && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Loader2 size={32} className="animate-spin text-[var(--fc-body-gray)] mb-4" />
-            <p className="text-[var(--fc-body-gray)]">Connecting to gateway...</p>
+        {isConnected && !error && (
+          <div className="sticky top-4 z-10 bg-white/80 backdrop-blur-md border border-zinc-200/50 rounded-2xl p-4 mb-8 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Search */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search skills..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
+                />
+              </div>
+
+              {/* Filters */}
+              <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 no-scrollbar">
+                {(['all', 'ready', 'disabled', 'error'] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setActiveFilter(status)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2",
+                      activeFilter === status
+                        ? "bg-zinc-900 text-white shadow-md"
+                        : "text-zinc-600 hover:bg-zinc-100"
+                    )}
+                  >
+                    <span className="capitalize">{status}</span>
+                    <span className={cn(
+                      "px-1.5 py-0.5 rounded text-[10px]",
+                      activeFilter === status ? "bg-white/20 text-white" : "bg-zinc-200 text-zinc-600"
+                    )}>
+                      {getCount(status)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {connectionError && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <WifiOff size={48} className="text-[var(--fc-body-gray)] mb-4" />
-            <h2 className="text-lg font-medium text-[var(--fc-dark-gray)] mb-2">
-              Connection Required
-            </h2>
-            <p className="text-[var(--fc-body-gray)] max-w-md">
-              {connectionError}
-            </p>
-          </div>
-        )}
+        {/* Content Area */}
+        <div className="min-h-[400px]">
+          {/* Loading State */}
+          {isLoading && skills.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in duration-500">
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse" />
+                <Loader2 size={40} className="relative z-10 animate-spin text-blue-600" />
+              </div>
+              <p className="mt-4 text-zinc-500 font-medium">Syncing with Gateway...</p>
+            </div>
+          )}
 
-        {isConnected && error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
+          {/* Error State */}
+          {connectionError && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-2xl border border-dashed border-zinc-300"
+            >
+              <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mb-4">
+                <WifiOff size={32} className="text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-zinc-900">Connection Issue</h3>
+              <p className="text-zinc-500 max-w-sm mt-2 mb-6">{connectionError}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors"
+              >
+                Retry Connection
+              </button>
+            </motion.div>
+          )}
 
-        {isConnected && !error && isLoading && skills.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Loader2 size={32} className="animate-spin text-[var(--fc-body-gray)] mb-4" />
-            <p className="text-[var(--fc-body-gray)]">Loading skills...</p>
-          </div>
-        )}
+          {/* Empty State */}
+          {!isLoading && !connectionError && filteredSkills.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center justify-center py-24 text-center"
+            >
+              <div className="w-20 h-20 bg-zinc-100 rounded-full flex items-center justify-center mb-4">
+                <Search size={32} className="text-zinc-400" />
+              </div>
+              <h3 className="text-lg font-medium text-zinc-900">No skills found</h3>
+              <p className="text-zinc-500 max-w-md mt-1">
+                {searchQuery ? `No skills matching "${searchQuery}"` : "No skills are currently available."}
+              </p>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="mt-4 text-blue-600 hover:underline text-sm font-medium"
+                >
+                  Clear search
+                </button>
+              )}
+            </motion.div>
+          )}
 
-        {isConnected && !isLoading && skills.length === 0 && !error && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Sparkles size={48} className="text-[var(--fc-body-gray)] mb-4" />
-            <h2 className="text-lg font-medium text-[var(--fc-dark-gray)] mb-2">
-              No Skills Found
-            </h2>
-            <p className="text-[var(--fc-body-gray)] max-w-md">
-              No skills are currently available on the gateway.
-            </p>
-          </div>
-        )}
-
-        {isConnected && skills.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {skills.map((skill) => (
-              <SkillCard key={skill.name} skill={skill} />
-            ))}
-          </div>
-        )}
+          {/* Grid */}
+          <motion.div
+            layout
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4"
+          >
+            <AnimatePresence mode='popLayout'>
+              {filteredSkills.map((skill) => (
+                <motion.div
+                  layout
+                  key={skill.name}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="h-full"
+                >
+                  <SkillCard skill={skill} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        </div>
       </main>
     </div>
   );

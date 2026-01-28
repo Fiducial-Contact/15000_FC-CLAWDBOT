@@ -307,6 +307,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
             sessionKey: key,
             sessionId: userId,
             displayName: 'Main Chat',
+            label: 'Main Chat',
             updatedAt: new Date().toISOString(),
           },
           ...prev,
@@ -365,18 +366,18 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
       const normalizedSessions: SessionEntry[] = gatewaySessions.map((session) => {
         const cachedTitle = sessionTitleCacheRef.current[session.sessionKey];
-        const displayName = session.displayName;
+        const remoteTitle = session.label || session.displayName || session.origin?.label || '';
         const shouldPreferCache = Boolean(
           cachedTitle &&
-            (!displayName ||
-              displayName === 'fc-team-chat' ||
-              displayName === 'Main Chat' ||
-              displayName === 'New Chat' ||
-              (session.origin?.label && displayName === session.origin.label))
+            (!remoteTitle ||
+              remoteTitle === 'fc-team-chat' ||
+              remoteTitle === 'Main Chat' ||
+              remoteTitle === 'New Chat')
         );
+        const displayName = shouldPreferCache ? cachedTitle : remoteTitle;
         return {
           ...session,
-          displayName: shouldPreferCache ? cachedTitle : displayName,
+          displayName,
         };
       });
 
@@ -389,6 +390,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
               sessionKey: defaultKey,
               sessionId: userId,
               displayName: 'Main Chat',
+              label: 'Main Chat',
               updatedAt: new Date().toISOString(),
             },
             ...normalizedSessions,
@@ -432,7 +434,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
       setSessions((prev) =>
         prev.map((session) =>
           session.sessionKey === sessionKey
-            ? { ...session, displayName: title, updatedAt: new Date().toISOString() }
+            ? { ...session, displayName: title, label: title, updatedAt: new Date().toISOString() }
             : session
         )
       );
@@ -445,21 +447,31 @@ export function useGateway({ userId }: UseGatewayOptions) {
         return;
       }
 
+      let patched = false;
       try {
-        await clientRef.current.patchSession(sessionKey, { displayName: title });
-        const sessionList = await clientRef.current.listSessions();
-        applyGatewaySessions(sessionList);
+        await clientRef.current.patchSession(sessionKey, { label: title });
+        patched = true;
       } catch (err) {
         const message = err instanceof Error ? err.message : '';
         if (message.toLowerCase().includes('missing scope')) {
           canPatchSessionsRef.current = false;
           return;
         }
-        if (message.toLowerCase().includes('unexpected property') && message.includes('displayName')) {
-          // Backend doesn't support displayName field, skip silently
-          return;
+        if (message.toLowerCase().includes('unexpected property') && message.includes('label')) {
+          try {
+            await clientRef.current.patchSession(sessionKey, { displayName: title });
+            patched = true;
+          } catch (fallbackErr) {
+            console.error('Failed to update session title:', fallbackErr);
+          }
+        } else {
+          console.error('Failed to update session title:', err);
         }
-        console.error('Failed to update session title:', err);
+      }
+
+      if (patched) {
+        const sessionList = await clientRef.current.listSessions();
+        applyGatewaySessions(sessionList);
       }
     },
     [applyGatewaySessions, persistSessionTitle]
@@ -675,7 +687,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
           const sessionEntry = sessionsRef.current.find(
             (session) => session.sessionKey === currentSessionKey
           );
-          const displayName = sessionEntry?.displayName;
+          const displayName = sessionEntry?.label || sessionEntry?.displayName;
           const shouldUpdateTitle =
             !!firstUserMsg &&
             (!displayName || displayName === 'Main Chat' || displayName === 'New Chat');
@@ -705,6 +717,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
       sessionKey: newSessionKey,
       sessionId: newSessionId,
       displayName: `New Chat`,
+      label: 'New Chat',
       updatedAt: new Date().toISOString(),
     };
 
