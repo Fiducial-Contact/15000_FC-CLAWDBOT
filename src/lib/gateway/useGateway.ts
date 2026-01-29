@@ -161,6 +161,14 @@ function generateSessionId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function stripAttachmentMetadata(text: string): string {
+  return text
+    .replace(/\n\n(?:(?:Image|File): [^\n]*\nURL: [^\n]*(?:\n|$))+/g, '')
+    .replace(/^(?:(?:Image|File): [^\n]*\nURL: [^\n]*(?:\n|$))+/g, '')
+    .replace(/^Attached (?:image|file)\(s\)\.$/g, '')
+    .trim();
+}
+
 function generateSessionTitle(message: string): string {
   const cleaned = message.trim().replace(/\s+/g, ' ');
   if (cleaned.length <= 30) return cleaned;
@@ -789,7 +797,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
             return {
               id: `hist_${sessionHash}_${loadTime}_${idx}`,
               sessionKey: currentSessionKey,
-              content: isToolResult ? '' : contentText,
+              content: isToolResult ? '' : (m.role === 'user' ? stripAttachmentMetadata(contentText) : contentText),
               role: m.role === 'user' ? 'user' : 'assistant',
               isToolResult,
               timestamp: '',

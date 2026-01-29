@@ -523,7 +523,7 @@ export const MessageGroup = memo(function MessageGroup({
 
           {textParts.map((part, idx) => (
             <div key={part.messageId} className="relative group max-w-full">
-              <div className={`px-4 py-3 text-[14px] leading-relaxed max-w-full ${
+              <div className={`px-4 py-3 text-[14px] leading-relaxed max-w-full overflow-hidden break-words ${
                 isUser
                   ? 'bg-[var(--fc-charcoal)] text-white rounded-2xl rounded-tr-sm'
                   : 'bg-white text-[var(--fc-black)] rounded-2xl rounded-tl-sm shadow-sm border border-[var(--fc-border-gray)]'

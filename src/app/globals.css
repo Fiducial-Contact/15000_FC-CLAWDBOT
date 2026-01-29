@@ -251,6 +251,8 @@ p {
 /* Markdown Content Styles */
 .markdown-content {
   @apply text-[var(--fc-black)];
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .markdown-content > *:first-child {

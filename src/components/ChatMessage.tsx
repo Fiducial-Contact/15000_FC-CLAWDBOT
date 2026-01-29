@@ -671,7 +671,7 @@ export const ChatMessage = memo(function ChatMessage({
           {(hasContent || hasMedia) && (
             <div className={`relative group max-w-full ${isUser ? 'items-end' : 'items-start'}`}>
               <div
-                className={`px-4 py-3 text-[14px] leading-relaxed max-w-full ${isUser
+                className={`px-4 py-3 text-[14px] leading-relaxed max-w-full overflow-hidden break-words ${isUser
                     ? 'bg-[var(--fc-charcoal)] text-white rounded-2xl rounded-tr-sm'
                     : 'bg-white text-[var(--fc-black)] rounded-2xl rounded-tl-sm shadow-sm border border-[var(--fc-border-gray)]'
                   }`}
@@ -700,7 +700,7 @@ export const ChatMessage = memo(function ChatMessage({
                 )}
                 {hasContent ? (
                   isUser ? (
-                    <span className="whitespace-pre-wrap text-white" style={{ color: '#ffffff !important' }}>{displayContent}</span>
+                    <span className="whitespace-pre-wrap break-words text-white" style={{ color: '#ffffff !important' }}>{displayContent}</span>
                   ) : (
                     <div className="markdown-content">
                       <ReactMarkdown
