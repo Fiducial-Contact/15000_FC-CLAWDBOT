@@ -13,7 +13,7 @@ export function LoginForm({ onLogin, error, loading }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (email && password) {
       onLogin(email, password);
@@ -48,7 +48,9 @@ export function LoginForm({ onLogin, error, loading }: LoginFormProps) {
               </label>
               <input
                 id="email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@company.com"
@@ -72,7 +74,9 @@ export function LoginForm({ onLogin, error, loading }: LoginFormProps) {
               </label>
               <input
                 id="password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
@@ -112,7 +116,7 @@ export function LoginForm({ onLogin, error, loading }: LoginFormProps) {
                 mt-2
               "
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
 

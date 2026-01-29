@@ -193,6 +193,49 @@ function buildOutboundText(params: {
   return outboundParts.join('\n\n') || fallbackText;
 }
 
+interface UploadResult {
+  id: string;
+  url: string;
+  name: string;
+}
+
+interface AttachmentUploadResult {
+  imageResults: UploadResult[];
+  fileResults: UploadResult[];
+  imageError: Error | null;
+  fileError: Error | null;
+}
+
+async function uploadAttachmentsInParallel(
+  imageInputs: ChatAttachmentInput[],
+  fileInputs: ChatAttachmentInput[],
+  userId: string
+): Promise<AttachmentUploadResult> {
+  const uploadBatch = async (inputs: ChatAttachmentInput[]): Promise<UploadResult[]> => {
+    return Promise.all(
+      inputs.map(async (item) => {
+        const upload = await uploadFileAndCreateSignedUrl({
+          file: item.file,
+          userId,
+        });
+        return { id: item.id, url: upload.signedUrl, name: item.file.name };
+      })
+    );
+  };
+
+  const [imageSettled, fileSettled] = await Promise.allSettled([
+    imageInputs.length > 0 ? uploadBatch(imageInputs) : Promise.resolve([]),
+    fileInputs.length > 0 ? uploadBatch(fileInputs) : Promise.resolve([]),
+  ]);
+
+  return {
+    imageResults: imageSettled.status === 'fulfilled' ? imageSettled.value : [],
+    fileResults: fileSettled.status === 'fulfilled' ? fileSettled.value : [],
+    imageError: imageSettled.status === 'rejected' ? imageSettled.reason as Error : null,
+    fileError: fileSettled.status === 'rejected' ? fileSettled.reason as Error : null,
+  };
+}
+
 const CURRENT_SESSION_KEY = 'fc-chat-current-session';
 const GATEWAY_AGENT_ID = 'work';
 const WEBCHAT_CHANNEL = 'webchat';
@@ -816,39 +859,18 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
       let imageUrlText = '';
       let fileUrlText = '';
-      if (imageInputs.length > 0) {
-        try {
-          const uploadResults = await Promise.all(
-            imageInputs.map(async (item) => {
-              const upload = await uploadFileAndCreateSignedUrl({
-                file: item.file,
-                userId,
-              });
-              return { id: item.id, url: upload.signedUrl, name: item.file.name };
-            })
-          );
 
-          const urlById = new Map(uploadResults.map((result) => [result.id, result.url]));
+      if (imageInputs.length > 0 || fileInputs.length > 0) {
+        const uploadResult = await uploadAttachmentsInParallel(imageInputs, fileInputs, userId);
+
+        if (uploadResult.imageError || uploadResult.fileError) {
+          const errorMsg = uploadResult.imageError?.message || uploadResult.fileError?.message || 'Upload failed';
+          setError(errorMsg);
           const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) => {
-            if (item.kind !== 'image') return item;
-            const url = urlById.get(item.id);
-            return { ...item, url, status: url ? 'ready' : 'error' };
+            if (item.kind === 'image' && uploadResult.imageError) return { ...item, status: 'error' as const };
+            if (item.kind === 'file' && uploadResult.fileError) return { ...item, status: 'error' as const };
+            return item;
           });
-
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === messageId ? { ...message, attachments: updatedAttachments } : message
-            )
-          );
-
-          imageUrlText = buildImageUrlText(
-            uploadResults.map((result) => ({ name: result.name, url: result.url }))
-          );
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Failed to upload image');
-          const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) =>
-            item.kind === 'image' ? { ...item, status: 'error' } : item
-          );
           setMessages((prev) =>
             prev.map((message) =>
               message.id === messageId ? { ...message, attachments: updatedAttachments } : message
@@ -857,50 +879,33 @@ export function useGateway({ userId }: UseGatewayOptions) {
           setIsLoading(false);
           return;
         }
-      }
 
-      if (fileInputs.length > 0) {
-        try {
-          const uploadResults = await Promise.all(
-            fileInputs.map(async (item) => {
-              const upload = await uploadFileAndCreateSignedUrl({
-                file: item.file,
-                userId,
-              });
-              return { id: item.id, url: upload.signedUrl, name: item.file.name };
-            })
-          );
+        const imageUrlById = new Map(uploadResult.imageResults.map((r) => [r.id, r.url]));
+        const fileUrlById = new Map(uploadResult.fileResults.map((r) => [r.id, r.url]));
+        const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) => {
+          if (item.kind === 'image') {
+            const url = imageUrlById.get(item.id);
+            return { ...item, url, status: url ? 'ready' as const : 'error' as const };
+          }
+          if (item.kind === 'file') {
+            const url = fileUrlById.get(item.id);
+            return { ...item, url, status: url ? 'ready' as const : 'error' as const };
+          }
+          return item;
+        });
 
-          const urlById = new Map(uploadResults.map((result) => [result.id, result.url]));
-          const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) => {
-            if (item.kind !== 'file') return item;
-            const url = urlById.get(item.id);
-            const status: ChatAttachment['status'] = url ? 'ready' : 'error';
-            return { ...item, url, status };
-          });
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === messageId ? { ...message, attachments: updatedAttachments } : message
+          )
+        );
 
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === messageId ? { ...message, attachments: updatedAttachments } : message
-            )
-          );
-
-          fileUrlText = buildFileUrlText(
-            uploadResults.map((result) => ({ name: result.name, url: result.url }))
-          );
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Failed to upload file');
-          const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) =>
-            item.kind === 'file' ? { ...item, status: 'error' } : item
-          );
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === messageId ? { ...message, attachments: updatedAttachments } : message
-            )
-          );
-          setIsLoading(false);
-          return;
-        }
+        imageUrlText = buildImageUrlText(
+          uploadResult.imageResults.map((r) => ({ name: r.name, url: r.url }))
+        );
+        fileUrlText = buildFileUrlText(
+          uploadResult.fileResults.map((r) => ({ name: r.name, url: r.url }))
+        );
       }
 
       const outboundText = buildOutboundText({

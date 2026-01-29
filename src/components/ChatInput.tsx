@@ -375,7 +375,8 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading, prefillValue, 
             onBlur={() => setIsFocused(false)}
             disabled={disabled}
             rows={1}
-            className="w-full bg-transparent border-none outline-none resize-none text-[15px] text-[var(--fc-black)] placeholder:text-transparent leading-relaxed min-h-[24px] max-h-[200px]"
+            aria-label="Message input"
+            className="w-full bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2 resize-none text-[15px] text-[var(--fc-black)] placeholder:text-transparent leading-relaxed min-h-[24px] max-h-[200px] rounded-lg"
             style={{ fontFamily: 'inherit' }}
           />
           
@@ -395,8 +396,9 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading, prefillValue, 
           <div className="flex items-center gap-1">
             {/* Attach Button */}
             <button
-              className="p-2 rounded-lg text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)] transition-colors"
+              className="p-2 rounded-lg text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2"
               title="Attach file"
+              aria-label="Attach file"
               type="button"
               disabled={disabled}
               onClick={() => fileInputRef.current?.click()}
@@ -451,9 +453,10 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading, prefillValue, 
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
                   transition={{ duration: 0.15 }}
-                  className="p-2 rounded-lg text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)] transition-colors"
+                  className="p-2 rounded-lg text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2"
                   type="button"
                   disabled={disabled}
+                  aria-label="Voice input"
                 >
                   <Mic size={18} />
                 </motion.button>
@@ -468,16 +471,17 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading, prefillValue, 
               <motion.button
                 initial={{ scale: 0.8 }}
                 animate={{ scale: 1 }}
-                className="flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white shadow-lg hover:shadow-xl transition-shadow"
+                className="flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white shadow-lg hover:shadow-xl transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2"
                 onClick={onAbort}
                 title="Stop generating"
+                aria-label="Stop generating"
                 type="button"
               >
                 <Square size={14} className="fill-current" />
               </motion.button>
             ) : (
               <button
-                className={`flex items-center justify-center w-11 h-11 rounded-xl transition-all duration-300 ${
+                className={`flex items-center justify-center w-11 h-11 rounded-xl transition-all duration-300 focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2 ${
                   hasContent
                     ? 'bg-[var(--fc-black)] text-white shadow-lg hover:shadow-xl hover:scale-105 active:scale-95'
                     : 'bg-[var(--fc-subtle-gray)] text-[var(--fc-light-gray)] cursor-not-allowed'
@@ -485,6 +489,7 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading, prefillValue, 
                 disabled={!hasContent || disabled}
                 onClick={handleSubmit}
                 type="button"
+                aria-label="Send message"
               >
                 <Send size={18} className={hasContent ? 'ml-0.5' : ''} />
               </button>

@@ -77,6 +77,7 @@ src/
 - Chat history managed by Clawdbot Gateway
 
 ## External Dependencies
-- Clawdbot Gateway (WebSocket API)
-- Supabase (Authentication)
+- Clawdbot Gateway (WebSocket API, default port 18789)
+- Supabase (Authentication, Storage, Push subscriptions)
 - Vercel (Deployment)
+- Web Push (VAPID-based notifications)

@@ -203,18 +203,53 @@ Branded web chat interface for Fiducial Communications team to interact with the
 ### Development
 
 ```bash
+cp .env.example .env.local
+# Edit .env.local with your values
 pnpm install
 pnpm dev
 ```
 
 Open http://localhost:3000
 
+### Required Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (for push API) |
+| `NEXT_PUBLIC_GATEWAY_WS_URL` | Gateway WebSocket URL (e.g., `ws://host:18789`) |
+| `NEXT_PUBLIC_GATEWAY_TOKEN` | Gateway auth token |
+
+See `.env.example` for all available options including storage, push notifications, and file upload limits.
+
 ### Gateway Connection
 
 ```
-Host: 46.224.225.164:18789
+Protocol: WebSocket
+Default Port: 18789
 Agent: work (claude-sonnet-4-5)
 Methods: chat.send, chat.history, connect
+```
+
+### Required Supabase Tables
+
+The app expects the following Supabase table for push notifications:
+
+```sql
+create table if not exists web_push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  endpoint text unique not null,
+  p256dh text not null,
+  auth text not null,
+  peer_id text,
+  user_agent text,
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_web_push_user on web_push_subscriptions(user_id);
+create index if not exists idx_web_push_peer on web_push_subscriptions(peer_id);
 ```
 
 ---
