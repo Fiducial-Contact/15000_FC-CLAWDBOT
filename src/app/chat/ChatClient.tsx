@@ -10,6 +10,7 @@ import {
   Film,
   Megaphone,
   Bell,
+  BellRing,
   FileText,
   Mic,
   MoreHorizontal,
@@ -457,10 +458,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
             }
             if (block.result) {
               lines.push(
-                `[Tool Result]\n${
-                  typeof block.result === 'string'
-                    ? block.result
-                    : JSON.stringify(block.result, null, 2)
+                `[Tool Result]\n${typeof block.result === 'string'
+                  ? block.result
+                  : JSON.stringify(block.result, null, 2)
                 }`
               );
             }
@@ -543,11 +543,10 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
               <button
                 type="button"
                 onClick={() => setShowDetails((prev) => !prev)}
-                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                  showDetails
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${showDetails
                     ? 'bg-[var(--fc-subtle-gray)] text-[var(--fc-black)] border-[var(--fc-border-gray)]'
                     : 'bg-white text-[var(--fc-body-gray)] border-[var(--fc-border-gray)] hover:text-[var(--fc-black)]'
-                }`}
+                  }`}
                 aria-pressed={showDetails}
               >
                 Details: {showDetails ? 'On' : 'Off'}
@@ -562,24 +561,57 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
             <div className="flex items-center gap-2">
               {isClient && pushSupported && (
-                <button
+                <motion.button
+                  layout
                   onClick={pushEnabled ? disablePush : enablePush}
                   disabled={pushBusy || pushPermission === 'denied' || (!pushEnabled && !vapidPublicKey)}
-                  className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`relative inline-flex items-center gap-2 text-xs font-medium px-4 py-2 rounded-full transition-all duration-300 ${pushEnabled
+                      ? 'bg-black text-white shadow-md hover:shadow-lg border border-black'
+                      : pushPermission === 'denied'
+                        ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                        : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 shadow-sm'
+                    }`}
                   title={pushError || 'Enable browser notifications'}
+                  whileHover={{ scale: pushPermission === 'denied' ? 1 : 1.02 }}
+                  whileTap={{ scale: pushPermission === 'denied' ? 1 : 0.98 }}
                 >
-                  <Bell size={12} />
-                  {pushEnabled
-                    ? 'Notifications on'
-                    : pushPermission === 'denied'
-                      ? 'Notifications blocked'
-                      : 'Enable notifications'}
-                </button>
+                  <AnimatePresence mode="wait" initial={false}>
+                    {pushEnabled ? (
+                      <motion.div
+                        key="on"
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex items-center gap-2"
+                      >
+                        <BellRing size={14} className="animate-pulse-slow" />
+                        <span>Notifications on</span>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="off"
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex items-center gap-2"
+                      >
+                        <Bell size={14} />
+                        <span>
+                          {pushPermission === 'denied'
+                            ? 'Notifications blocked'
+                            : 'Enable notifications'}
+                        </span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
               )}
               <button
                 onClick={handleCopySession}
                 disabled={!visibleMessages.length && !displayStreamingContent}
-                className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed h-[34px]"
                 title="Copy entire session"
               >
                 {sessionCopied ? <Check size={12} /> : <Copy size={12} />}

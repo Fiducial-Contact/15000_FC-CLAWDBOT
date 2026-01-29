@@ -33,13 +33,11 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}));
     const sessionKey = body?.sessionKey as string | undefined;
-    if (!sessionKey) {
-      return Response.json({ error: 'Session key is required' }, { status: 400 });
-    }
+    const userId = body?.userId as string | undefined;
 
-    const peerId = parsePeerId(sessionKey);
-    if (!peerId) {
-      return Response.json({ error: 'Invalid session key' }, { status: 400 });
+    const peerId = sessionKey ? parsePeerId(sessionKey) : null;
+    if (!peerId && !userId) {
+      return Response.json({ error: 'Session key or user ID is required' }, { status: 400 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -69,15 +67,17 @@ export async function POST(request: NextRequest) {
   const title = String(body?.title || 'New message');
   const messageBody = String(body?.body || 'You have a new message.');
   const url = String(body?.url || '/chat');
-  const icon = String(body?.icon || '/brand/favicon.png');
-  const badge = String(body?.badge || '/brand/favicon.png');
+  const icon = String(body?.icon || '/brand/webclip.png');
+  const badge = String(body?.badge || '/brand/webclip.png');
 
   let delivered = 0;
   let failed = 0;
 
   const targets = (data || []).filter((row) => {
-    if (row.peer_id === peerId) return true;
-    return typeof row.user_id === 'string' && peerId.startsWith(row.user_id);
+    if (userId && row.user_id === userId) return true;
+    if (peerId && row.peer_id === peerId) return true;
+    if (peerId && typeof row.user_id === 'string' && peerId.startsWith(row.user_id)) return true;
+    return false;
   });
 
   for (const row of targets) {
