@@ -56,15 +56,21 @@ export function VideoPlayer({ src }: { src: string }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!videoRef.current) return;
 
-    if (isPlaying) {
-      videoRef.current.pause();
+    if (videoRef.current.paused) {
+      try {
+        await videoRef.current.play();
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
+        console.error('Failed to play video:', error);
+      }
     } else {
-      void videoRef.current.play();
+      videoRef.current.pause();
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleVolumeChange = (value: number) => {
@@ -136,6 +142,9 @@ export function VideoPlayer({ src }: { src: string }) {
         preload="metadata"
         playsInline
         onClick={togglePlay}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
       />
 
       <AnimatePresence>
@@ -216,4 +225,3 @@ export function VideoPlayer({ src }: { src: string }) {
 }
 
 export default VideoPlayer;
-
