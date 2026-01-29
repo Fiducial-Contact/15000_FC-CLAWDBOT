@@ -543,20 +543,15 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
               <button
                 type="button"
                 onClick={() => setShowDetails((prev) => !prev)}
-                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${showDetails
-                    ? 'bg-[var(--fc-subtle-gray)] text-[var(--fc-black)] border-[var(--fc-border-gray)]'
-                    : 'bg-white text-[var(--fc-body-gray)] border-[var(--fc-border-gray)] hover:text-[var(--fc-black)]'
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all ${showDetails
+                  ? 'bg-[var(--fc-black)] text-white border-[var(--fc-black)]'
+                  : 'bg-white text-[var(--fc-body-gray)] border-[var(--fc-border-gray)] hover:border-[var(--fc-light-gray)]'
                   }`}
                 aria-pressed={showDetails}
-              >
-                Details: {showDetails ? 'On' : 'Off'}
-              </button>
-              <div
-                className="relative group"
                 title="Shows thinking process and tool calls. Tool details appear after the response completes."
               >
-                <Info size={14} className="text-[var(--fc-light-gray)] cursor-help" />
-              </div>
+                Details {showDetails ? 'On' : 'Off'}
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -565,15 +560,18 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                   layout
                   onClick={pushEnabled ? disablePush : enablePush}
                   disabled={pushBusy || pushPermission === 'denied' || (!pushEnabled && !vapidPublicKey)}
-                  className={`relative inline-flex items-center gap-2 text-xs font-medium px-4 py-2 rounded-full transition-all duration-300 ${pushEnabled
-                      ? 'bg-black text-white shadow-md hover:shadow-lg border border-black'
-                      : pushPermission === 'denied'
-                        ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                        : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 shadow-sm'
+                  className={`relative inline-flex items-center justify-center w-[34px] h-[34px] rounded-full transition-all duration-300 ${pushEnabled
+                    ? 'bg-black text-white shadow-md hover:shadow-lg border border-black'
+                    : pushPermission === 'denied'
+                      ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 shadow-sm'
                     }`}
-                  title={pushError || 'Enable browser notifications'}
-                  whileHover={{ scale: pushPermission === 'denied' ? 1 : 1.02 }}
-                  whileTap={{ scale: pushPermission === 'denied' ? 1 : 0.98 }}
+                  title={
+                    pushError ||
+                    (pushEnabled ? 'Notifications enabled' : 'Enable notifications')
+                  }
+                  whileHover={{ scale: pushPermission === 'denied' ? 1 : 1.05 }}
+                  whileTap={{ scale: pushPermission === 'denied' ? 1 : 0.95 }}
                 >
                   <AnimatePresence mode="wait" initial={false}>
                     {pushEnabled ? (
@@ -583,10 +581,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0, opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="flex items-center gap-2"
+                        className="flex items-center justify-center"
                       >
-                        <BellRing size={14} className="animate-pulse-slow" />
-                        <span>Notifications on</span>
+                        <BellRing size={16} className="animate-pulse-slow" />
                       </motion.div>
                     ) : (
                       <motion.div
@@ -595,14 +592,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0, opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="flex items-center gap-2"
+                        className="flex items-center justify-center"
                       >
-                        <Bell size={14} />
-                        <span>
-                          {pushPermission === 'denied'
-                            ? 'Notifications blocked'
-                            : 'Enable notifications'}
-                        </span>
+                        <Bell size={16} />
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -611,11 +603,10 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
               <button
                 onClick={handleCopySession}
                 disabled={!visibleMessages.length && !displayStreamingContent}
-                className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed h-[34px]"
+                className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Copy entire session"
               >
-                {sessionCopied ? <Check size={12} /> : <Copy size={12} />}
-                {sessionCopied ? 'Copied' : 'Copy session'}
+                {sessionCopied ? <Check size={16} /> : <Copy size={16} />}
               </button>
             </div>
           </div>

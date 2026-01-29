@@ -78,12 +78,12 @@ const Tooltip = memo(function Tooltip({
             {content}
             <div
               className={`absolute w-1.5 h-1.5 bg-[var(--fc-black)] rotate-45 ${position === 'right'
-                  ? 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2'
-                  : position === 'left'
-                    ? 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2'
-                    : position === 'top'
-                      ? 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2'
-                      : 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2'
+                ? 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2'
+                : position === 'left'
+                  ? 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2'
+                  : position === 'top'
+                    ? 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2'
+                    : 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2'
                 }`}
             />
           </motion.div>
@@ -312,8 +312,8 @@ const IconRail = memo(function IconRail({
           <button
             onClick={() => onSelectSession(mainSession.sessionKey)}
             className={`relative w-11 h-11 mb-2 flex items-center justify-center rounded-xl transition-all duration-200 ${currentSessionKey === mainSession.sessionKey
-                ? 'bg-[var(--fc-black)] text-white shadow-md'
-                : 'hover:bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)]'
+              ? 'bg-[var(--fc-black)] text-white shadow-md'
+              : 'hover:bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)]'
               }`}
             aria-label={getSessionTitle(mainSession)}
             aria-current={currentSessionKey === mainSession.sessionKey ? 'page' : undefined}
@@ -335,8 +335,8 @@ const IconRail = memo(function IconRail({
             <button
               onClick={() => onSelectSession(session.sessionKey)}
               className={`relative w-full aspect-square flex items-center justify-center rounded-xl transition-all duration-200 ${currentSessionKey === session.sessionKey
-                  ? 'bg-[var(--fc-black)] text-white shadow-md'
-                  : 'hover:bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)]'
+                ? 'bg-[var(--fc-black)] text-white shadow-md'
+                : 'hover:bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)]'
                 }`}
               aria-label={getSessionTitle(session)}
               aria-current={currentSessionKey === session.sessionKey ? 'page' : undefined}
@@ -441,8 +441,8 @@ export const ChatSidebar = memo(function ChatSidebar({
         <button
           onClick={() => onSelectSession(session.sessionKey)}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ease-out ${isActive
-              ? 'bg-[var(--fc-black)] text-white shadow-md'
-              : 'text-[var(--fc-dark-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)]'
+            ? 'bg-[var(--fc-black)] text-white shadow-md selection:bg-white/30 selection:text-white'
+            : 'text-[var(--fc-dark-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)]'
             }`}
           aria-label={getSessionTitle(session)}
           aria-current={isActive ? 'page' : undefined}
@@ -454,8 +454,8 @@ export const ChatSidebar = memo(function ChatSidebar({
             {isPinned ? <Pin size={15} /> : <MessageSquare size={15} />}
           </div>
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <p
                 className={`text-[13px] truncate font-medium transition-colors duration-150 ${isActive ? 'text-white' : 'text-[var(--fc-black)]'
                   } ${unreadCount > 0 && !isActive ? 'font-semibold' : ''}`}
@@ -468,36 +468,31 @@ export const ChatSidebar = memo(function ChatSidebar({
                 </span>
               )}
             </div>
-            <div
-              className={`flex items-center gap-1 text-[11px] mt-0.5 transition-colors duration-150 ${isActive ? 'text-white/70' : 'text-[var(--fc-light-gray)]'
-                }`}
-            >
-              <Clock size={10} />
-              <span>{formatSessionDate(session.updatedAt)}</span>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <span
+                className={`text-[10px] transition-all duration-150 ${isActive ? 'text-white/60' : 'text-[var(--fc-light-gray)]'
+                  } ${!isPinned ? 'group-hover:hidden' : ''}`}
+              >
+                {formatSessionDate(session.updatedAt)}
+              </span>
+              {!isPinned && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteClick(session);
+                  }}
+                  className={`p-0.5 rounded hidden group-hover:block transition-all duration-150 ${isActive
+                    ? 'text-white/90 hover:text-white'
+                    : 'text-[var(--fc-body-gray)] hover:text-[var(--fc-action-red)]'
+                    }`}
+                  aria-label="Delete conversation"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
             </div>
           </div>
         </button>
-
-        {/* Delete button - Enhanced hover state */}
-        {!isPinned && (
-          <div className="absolute right-2 top-1/2 -translate-y-1/2">
-            <Tooltip content="Delete conversation" position="left" delay={200}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteClick(session);
-                }}
-                className={`p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 ${isActive
-                    ? 'text-white/60 hover:text-white hover:bg-white/10'
-                    : 'text-[var(--fc-light-gray)] hover:text-[var(--fc-action-red)] hover:bg-red-50'
-                  }`}
-                aria-label="Delete conversation"
-              >
-                <Trash2 size={14} />
-              </button>
-            </Tooltip>
-          </div>
-        )}
       </motion.div>
     );
   };
@@ -522,7 +517,7 @@ export const ChatSidebar = memo(function ChatSidebar({
         {isOpen && (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 300, opacity: 1 }}
+            animate={{ width: 280, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
             className="h-full bg-[#f9f9f9] border-r border-[var(--fc-border-gray)] flex flex-col overflow-hidden"
