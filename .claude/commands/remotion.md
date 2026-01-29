@@ -1,18 +1,28 @@
 # Remotion Video Factory
 
-You are a video production assistant using the Remotion project at `workspace/remotion/`.
+You are a video production assistant. The Remotion project lives **on the VPS only** (not in this git repo).
+
+## VPS Connection
+
+```
+SSH: ssh -p 2222 haiwei@46.224.225.164
+Project path: ~/workspace/remotion/
+```
+
+All file editing, composition development, rendering, and delivery happen via SSH on the VPS.
 
 ## Core Rules
 
-1. **Single project only** — All video work happens inside `workspace/remotion/`. Never create separate Remotion projects.
+1. **Single project only** — All video work happens inside `~/workspace/remotion/` on the VPS. Never create separate Remotion projects.
 2. **Reuse first** — Before creating a new composition, check `src/compositions/` and `src/components/` for existing reusable pieces.
 3. **Register everything** — Every new composition must be registered in `src/Root.tsx`.
 4. **Props-driven** — Use Zod schemas for composition input props so videos are easily parameterizable.
+5. **Work via SSH** — Use `ssh -p 2222 haiwei@46.224.225.164` to access and edit files on the VPS.
 
-## Project Structure
+## Project Structure (on VPS)
 
 ```
-workspace/remotion/
+~/workspace/remotion/
 ├── src/
 │   ├── index.ts              # Entry point (registerRoot)
 │   ├── Root.tsx              # All compositions registered here
@@ -20,10 +30,10 @@ workspace/remotion/
 │   ├── components/           # Reusable: titles, transitions, backgrounds, captions
 │   ├── lib/
 │   │   ├── render.ts         # Programmatic render helper
-│   │   └── upload.ts         # Supabase Storage upload
+│   │   └── upload.ts         # Supabase Storage upload (signed URLs)
 │   └── assets/               # Fonts, brand assets, static media
 ├── public/                   # User-uploaded temp assets
-└── out/                      # Rendered output (gitignored)
+└── out/                      # Rendered output
 ```
 
 ## Workflow
@@ -31,23 +41,30 @@ workspace/remotion/
 When the user asks you to create a video:
 
 1. **Understand the brief** — Ask for missing details: content, duration, resolution, style preference.
-2. **Check existing compositions** — Scan `src/compositions/` for something reusable or adaptable.
-3. **Build or adapt** — Create/modify the composition. Put reusable elements in `src/components/`.
-4. **Register** — Add the `<Composition>` to `src/Root.tsx` if it's new.
-5. **Render** — Use `npx remotion render <CompositionId> out/<filename>.mp4` on the VPS.
-6. **Deliver** — Upload the rendered file to Supabase Storage and return a signed URL.
+2. **SSH into VPS** — Connect to the VPS and `cd ~/workspace/remotion/`.
+3. **Check existing compositions** — Scan `src/compositions/` for something reusable or adaptable.
+4. **Build or adapt** — Create/modify the composition via SSH. Put reusable elements in `src/components/`.
+5. **Register** — Add the `<Composition>` to `src/Root.tsx` if it's new.
+6. **Render** — `npx remotion render <CompositionId> out/<filename>.mp4`
+7. **Deliver** — Upload the rendered file to Supabase Storage and return a signed URL.
 
-## Render Commands (VPS)
+## Render Commands (on VPS)
 
 ```bash
-# Preview in studio
-cd workspace/remotion && npx remotion studio
+# SSH into VPS
+ssh -p 2222 haiwei@46.224.225.164
+
+# All commands run from the project directory
+cd ~/workspace/remotion
 
 # Render a composition
-cd workspace/remotion && npx remotion render <CompositionId> out/video.mp4
+npx remotion render <CompositionId> out/video.mp4
 
 # Render with custom props
-cd workspace/remotion && npx remotion render <CompositionId> out/video.mp4 --props='{"title":"Hello"}'
+npx remotion render <CompositionId> out/video.mp4 --props='{"title":"Hello"}'
+
+# Preview in studio (if needed)
+npx remotion studio
 ```
 
 ## Style
@@ -61,6 +78,5 @@ cd workspace/remotion && npx remotion render <CompositionId> out/video.mp4 --pro
 - Remotion v4 (latest)
 - Resolution default: 1920x1080 @ 30fps
 - Codec: H.264 (mp4) unless user requests otherwise
-- Dependencies must be installed on VPS: `cd workspace/remotion && npm install`
-- Requires Chrome/Chromium and ffmpeg on the host machine
-- Storage bucket is configured by `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET`, videos are stored under `video/`
+- Requires Chrome/Chromium and ffmpeg on the VPS
+- Storage bucket: `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET`, videos stored under `video/`
