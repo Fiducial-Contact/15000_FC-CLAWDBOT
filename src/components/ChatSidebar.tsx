@@ -438,9 +438,17 @@ export const ChatSidebar = memo(function ChatSidebar({
         transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
         className="group relative"
       >
-        <button
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => onSelectSession(session.sessionKey)}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ease-out ${isActive
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelectSession(session.sessionKey);
+            }
+          }}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ease-out cursor-pointer ${isActive
             ? 'bg-[var(--fc-black)] text-white shadow-md selection:bg-white/30 selection:text-white'
             : 'text-[var(--fc-dark-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)]'
             }`}
@@ -492,7 +500,7 @@ export const ChatSidebar = memo(function ChatSidebar({
               )}
             </div>
           </div>
-        </button>
+        </div>
       </motion.div>
     );
   };

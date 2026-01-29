@@ -1,0 +1,58 @@
+export interface UserPreferences {
+    language: 'en' | 'zh' | 'ja' | 'es' | 'fr' | 'de';
+    responseStyle: 'concise' | 'detailed' | 'casual' | 'formal';
+    timezone: string;
+}
+
+export interface UserProfile {
+    name: string;
+    role: string;
+    software: string[];
+    preferences: UserPreferences;
+    frequentTopics: string[];
+    learnedContext: string[];
+    lastUpdated: string;
+}
+
+export const MOCK_USER_PROFILE: UserProfile = {
+    name: 'Anand',
+    role: 'Motion Designer',
+    software: ['After Effects', 'Cinema 4D', 'Premiere Pro'],
+    preferences: {
+        language: 'en',
+        responseStyle: 'concise',
+        timezone: 'Europe/London'
+    },
+    frequentTopics: ['AE expressions', 'render settings'],
+    learnedContext: [
+        'Prefers keyboard shortcuts over menus',
+        'Working on Barclays project',
+        'Uses Mac with M1 chip'
+    ],
+    lastUpdated: '2026-01-29T12:00:00Z'
+};
+
+export const LANGUAGE_OPTIONS = [
+    { value: 'en', label: 'English' },
+    { value: 'zh', label: 'Chinese' },
+    { value: 'ja', label: 'Japanese' },
+    { value: 'es', label: 'Spanish' },
+    { value: 'fr', label: 'French' },
+    { value: 'de', label: 'German' },
+];
+
+export const RESPONSE_STYLE_OPTIONS = [
+    { value: 'concise', label: 'Concise' },
+    { value: 'detailed', label: 'Detailed' },
+    { value: 'casual', label: 'Casual' },
+    { value: 'formal', label: 'Formal' },
+];
+
+export const TIMEZONE_OPTIONS = [
+    { value: 'Europe/London', label: 'London (GMT)' },
+    { value: 'America/New_York', label: 'New York (EST)' },
+    { value: 'America/Los_Angeles', label: 'Los Angeles (PST)' },
+    { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
+    { value: 'Asia/Shanghai', label: 'Shanghai (CST)' },
+    { value: 'Europe/Paris', label: 'Paris (CET)' },
+];

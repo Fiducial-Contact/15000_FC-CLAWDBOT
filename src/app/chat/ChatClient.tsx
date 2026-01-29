@@ -19,7 +19,6 @@ import {
   Zap,
   Copy,
   Check,
-  Info,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useGateway } from '@/lib/gateway/useGateway';
@@ -29,8 +28,11 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatSidebar } from '@/components/ChatSidebar';
 import { CapabilityCard } from '@/components/CapabilityCard';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
+import { UserProfileModal } from '@/components/UserProfileModal';
 import { ToolCard, ToolCardSkeleton } from '@/components/ToolCard';
 import { AnimatedText } from '@/components/AnimatedText';
+import { createDefaultProfile } from '@/lib/profile';
+import type { UserProfile } from '@/lib/types/profile';
 import type { ChatAttachmentInput } from '@/lib/gateway/types';
 
 interface ChatClientProps {
@@ -371,447 +373,525 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   }, [visibleMessages.length, displayStreamingContent, scrollToBottom]);
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('fc-chat-show-details');
-      if (stored !== null) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setShowDetails(stored === 'true');
-      }
-    } catch {
-      // ignore storage errors
+
+useEffect(() => {
+  try {
+    const stored = localStorage.getItem('fc-chat-show-details');
+    if (stored !== null) {
+      setShowDetails(stored === 'true');
     }
-  }, []);
+  } catch {
+    // ignore storage errors
+  }
+}, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('fc-chat-show-details', String(showDetails));
-    } catch {
-      // ignore storage errors
+useEffect(() => {
+  try {
+    const prefill = localStorage.getItem('fc-chat-prefill');
+    if (prefill) {
+      setInputPrefill(prefill);
+      localStorage.removeItem('fc-chat-prefill');
     }
-  }, [showDetails]);
+  } catch {
+    // ignore storage errors
+  }
+}, []);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
-  };
+useEffect(() => {
+  try {
+    localStorage.setItem('fc-chat-show-details', String(showDetails));
+  } catch {
+    // ignore storage errors
+  }
+}, [showDetails]);
 
-  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
-    try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: userEmail,
-        password: currentPassword,
+const handleLogout = async () => {
+  await supabase.auth.signOut();
+  router.push('/');
+};
+
+const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+  try {
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: userEmail,
+      password: currentPassword,
+    });
+    if (signInError) {
+      return { success: false, error: 'Current password is incorrect' };
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+    return { success: true };
+  } catch {
+    return { success: false, error: 'An unexpected error occurred' };
+  }
+};
+
+const handleSuggestionClick = (text: string, requiresInput = false) => {
+  if (requiresInput) {
+    setInputPrefill(text);
+  } else {
+    sendMessage({ text });
+  }
+};
+
+const handleSurpriseMe = () => {
+  const sendable = CAPABILITY_CATEGORIES.filter((c) => !c.requiresInput);
+  const randomIndex = Math.floor(Math.random() * sendable.length);
+  handleSuggestionClick(sendable[randomIndex].defaultAction, false);
+};
+
+const fetchProfile = useCallback(async () => {
+  setProfileLoading(true);
+  setProfileError(null);
+  try {
+    const res = await fetch('/api/profile');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to load profile');
+    }
+    const data = await res.json();
+    setProfile(data.profile ?? createDefaultProfile());
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to load profile';
+    setProfileError(message);
+  } finally {
+    setProfileLoading(false);
+  }
+}, []);
+
+const saveProfile = useCallback(async (updatedProfile: UserProfile) => {
+  setProfileSaving(true);
+  setProfileError(null);
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedProfile),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to save profile');
+    }
+    const data = await res.json();
+    setProfile(data.profile);
+    setIsProfileModalOpen(false);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to save profile';
+    setProfileError(message);
+  } finally {
+    setProfileSaving(false);
+  }
+}, []);
+
+const handleOpenProfile = useCallback(() => {
+  setProfileError(null);
+  setIsProfileModalOpen(true);
+  fetchProfile();
+}, [fetchProfile]);
+
+const buildSessionText = useCallback(() => {
+  const lines: string[] = [];
+  for (const message of visibleMessages) {
+    const role = message.role === 'user' ? 'You' : 'Assistant';
+    const header = message.timestamp ? `[${message.timestamp}] ${role}` : role;
+    lines.push(header);
+    if (message.content) {
+      lines.push(message.content);
+    }
+    if (showDetails && message.blocks && message.blocks.length > 0) {
+      message.blocks.forEach((block) => {
+        if (block.type === 'thinking' && typeof block.text === 'string' && block.text.trim()) {
+          lines.push(`[Thinking]\n${block.text}`);
+        }
+        if (block.type === 'toolCall') {
+          const toolName =
+            typeof block.toolName === 'string'
+              ? block.toolName
+              : typeof block.name === 'string'
+                ? block.name
+                : 'Tool';
+          lines.push(`[Tool] ${toolName}`);
+          if (block.parameters) {
+            lines.push(`[Tool Params]\n${JSON.stringify(block.parameters, null, 2)}`);
+          }
+          if (block.result) {
+            lines.push(
+              `[Tool Result]\n${typeof block.result === 'string'
+                ? block.result
+                : JSON.stringify(block.result, null, 2)
+              }`
+            );
+          }
+        }
+        if (block.type === 'image_url' && typeof block.url === 'string') {
+          lines.push(`[Image] ${block.url}`);
+        }
       });
-      if (signInError) {
-        return { success: false, error: 'Current password is incorrect' };
-      }
-
-      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
-      if (updateError) {
-        return { success: false, error: updateError.message };
-      }
-      return { success: true };
-    } catch {
-      return { success: false, error: 'An unexpected error occurred' };
     }
-  };
-
-  const handleSuggestionClick = (text: string, requiresInput = false) => {
-    if (requiresInput) {
-      setInputPrefill(text);
-    } else {
-      sendMessage({ text });
+    if (message.attachments && message.attachments.length > 0) {
+      message.attachments.forEach((file) => {
+        const url = file.url || file.previewUrl;
+        lines.push(`[Attachment] ${file.fileName}${url ? ` — ${url}` : ''}`);
+      });
     }
-  };
+    lines.push('');
+  }
+  if (displayStreamingContent) {
+    lines.push(`[Assistant - streaming]\n${displayStreamingContent}`);
+  }
+  return lines.join('\n').trim();
+}, [visibleMessages, displayStreamingContent, showDetails]);
 
-  const handleSurpriseMe = () => {
-    const sendable = CAPABILITY_CATEGORIES.filter((c) => !c.requiresInput);
-    const randomIndex = Math.floor(Math.random() * sendable.length);
-    handleSuggestionClick(sendable[randomIndex].defaultAction, false);
-  };
+const handleCopySession = useCallback(async () => {
+  const text = buildSessionText();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    setSessionCopied(true);
+    window.setTimeout(() => setSessionCopied(false), 1500);
+  } catch (err) {
+    console.error('Failed to copy session:', err);
+  }
+}, [buildSessionText]);
 
-  const buildSessionText = useCallback(() => {
-    const lines: string[] = [];
-    for (const message of visibleMessages) {
-      const role = message.role === 'user' ? 'You' : 'Assistant';
-      const header = message.timestamp ? `[${message.timestamp}] ${role}` : role;
-      lines.push(header);
-      if (message.content) {
-        lines.push(message.content);
-      }
-      if (showDetails && message.blocks && message.blocks.length > 0) {
-        message.blocks.forEach((block) => {
-          if (block.type === 'thinking' && typeof block.text === 'string' && block.text.trim()) {
-            lines.push(`[Thinking]\n${block.text}`);
-          }
-          if (block.type === 'toolCall') {
-            const toolName =
-              typeof block.toolName === 'string'
-                ? block.toolName
-                : typeof block.name === 'string'
-                  ? block.name
-                  : 'Tool';
-            lines.push(`[Tool] ${toolName}`);
-            if (block.parameters) {
-              lines.push(`[Tool Params]\n${JSON.stringify(block.parameters, null, 2)}`);
-            }
-            if (block.result) {
-              lines.push(
-                `[Tool Result]\n${typeof block.result === 'string'
-                  ? block.result
-                  : JSON.stringify(block.result, null, 2)
-                }`
-              );
-            }
-          }
-          if (block.type === 'image_url' && typeof block.url === 'string') {
-            lines.push(`[Image] ${block.url}`);
-          }
-        });
-      }
-      if (message.attachments && message.attachments.length > 0) {
-        message.attachments.forEach((file) => {
-          const url = file.url || file.previewUrl;
-          lines.push(`[Attachment] ${file.fileName}${url ? ` — ${url}` : ''}`);
-        });
-      }
-      lines.push('');
-    }
-    if (displayStreamingContent) {
-      lines.push(`[Assistant - streaming]\n${displayStreamingContent}`);
-    }
-    return lines.join('\n').trim();
-  }, [visibleMessages, displayStreamingContent, showDetails]);
+const isLoadingHistory = loadingHistoryKey === currentSessionKey && visibleMessages.length === 0;
+const isEmpty = ((visibleMessages.length === 0 && !displayStreamingContent) || isDraftSession) && !isLoadingHistory;
 
-  const handleCopySession = useCallback(async () => {
-    const text = buildSessionText();
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setSessionCopied(true);
-      window.setTimeout(() => setSessionCopied(false), 1500);
-    } catch (err) {
-      console.error('Failed to copy session:', err);
-    }
-  }, [buildSessionText]);
+return (
+  <div className="flex flex-col h-screen bg-gradient-to-b from-[var(--fc-off-white)] to-white">
+    <Header
+      userName={userEmail}
+      onLogout={handleLogout}
+      onChangePassword={() => setIsPasswordModalOpen(true)}
+      onOpenProfile={handleOpenProfile}
+    />
 
-  const isLoadingHistory = loadingHistoryKey === currentSessionKey && visibleMessages.length === 0;
-  const isEmpty = ((visibleMessages.length === 0 && !displayStreamingContent) || isDraftSession) && !isLoadingHistory;
-
-  return (
-    <div className="flex flex-col h-screen bg-gradient-to-b from-[var(--fc-off-white)] to-white">
-      <Header
-        userName={userEmail}
-        onLogout={handleLogout}
-        onChangePassword={() => setIsPasswordModalOpen(true)}
+    <div className="flex-1 flex overflow-hidden">
+      <ChatSidebar
+        sessions={sessions}
+        currentSessionKey={currentSessionKey}
+        mainSessionKey={mainSessionKey}
+        isOpen={isSidebarOpen}
+        onNewSession={() => {
+          createNewSession();
+        }}
+        onSelectSession={handleSwitchSession}
+        onDeleteSession={deleteSession}
+        onToggle={toggleSidebar}
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        <ChatSidebar
-          sessions={sessions}
-          currentSessionKey={currentSessionKey}
-          mainSessionKey={mainSessionKey}
-          isOpen={isSidebarOpen}
-          onNewSession={() => {
-            createNewSession();
-          }}
-          onSelectSession={handleSwitchSession}
-          onDeleteSession={deleteSession}
-          onToggle={toggleSidebar}
-        />
+      <main className="flex-1 overflow-hidden flex flex-col relative">
+        {/* Error Banner */}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -20, height: 0 }}
+              className="flex items-center gap-2 bg-amber-50 border-b border-amber-200 px-4 py-3 text-sm text-amber-800"
+            >
+              <AlertCircle size={16} className="flex-shrink-0 text-amber-600" />
+              <span>{error}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <main className="flex-1 overflow-hidden flex flex-col relative">
-          {/* Error Banner */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -20, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                exit={{ opacity: 0, y: -20, height: 0 }}
-                className="flex items-center gap-2 bg-amber-50 border-b border-amber-200 px-4 py-3 text-sm text-amber-800"
-              >
-                <AlertCircle size={16} className="flex-shrink-0 text-amber-600" />
-                <span>{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Session Actions */}
-          <div className="px-4 md:px-6 py-3 flex items-center justify-between border-b border-[var(--fc-border-gray)] bg-white/70 backdrop-blur">
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setShowDetails((prev) => !prev)}
-                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all ${showDetails
-                  ? 'bg-[var(--fc-black)] text-white border-[var(--fc-black)]'
-                  : 'bg-white text-[var(--fc-body-gray)] border-[var(--fc-border-gray)] hover:border-[var(--fc-light-gray)]'
-                  }`}
-                aria-pressed={showDetails}
-                title="Shows thinking process and tool calls. Tool details appear after the response completes."
-              >
-                Details {showDetails ? 'On' : 'Off'}
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {isClient && pushSupported && (
-                <motion.button
-                  layout
-                  onClick={pushEnabled ? disablePush : enablePush}
-                  disabled={pushBusy || pushPermission === 'denied' || (!pushEnabled && !vapidPublicKey)}
-                  className={`relative inline-flex items-center justify-center w-[34px] h-[34px] rounded-full transition-all duration-300 ${pushEnabled
-                    ? 'bg-black text-white shadow-md hover:shadow-lg border border-black'
-                    : pushPermission === 'denied'
-                      ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 shadow-sm'
-                    }`}
-                  title={
-                    pushError ||
-                    (pushEnabled ? 'Notifications enabled' : 'Enable notifications')
-                  }
-                  whileHover={{ scale: pushPermission === 'denied' ? 1 : 1.05 }}
-                  whileTap={{ scale: pushPermission === 'denied' ? 1 : 0.95 }}
-                >
-                  <AnimatePresence mode="wait" initial={false}>
-                    {pushEnabled ? (
-                      <motion.div
-                        key="on"
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="flex items-center justify-center"
-                      >
-                        <BellRing size={16} className="animate-pulse-slow" />
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        key="off"
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="flex items-center justify-center"
-                      >
-                        <Bell size={16} />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.button>
-              )}
-              <button
-                onClick={handleCopySession}
-                disabled={!visibleMessages.length && !displayStreamingContent}
-                className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Copy entire session"
-              >
-                {sessionCopied ? <Check size={16} /> : <Copy size={16} />}
-              </button>
-            </div>
+        {/* Session Actions */}
+        <div className="px-4 md:px-6 py-3 flex items-center justify-between border-b border-[var(--fc-border-gray)] bg-white/70 backdrop-blur">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowDetails((prev) => !prev)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all ${showDetails
+                ? 'bg-[var(--fc-black)] text-white border-[var(--fc-black)]'
+                : 'bg-white text-[var(--fc-body-gray)] border-[var(--fc-border-gray)] hover:border-[var(--fc-light-gray)]'
+                }`}
+              aria-pressed={showDetails}
+              title="Shows thinking process and tool calls. Tool details appear after the response completes."
+            >
+              Details {showDetails ? 'On' : 'Off'}
+            </button>
           </div>
 
-          {/* Messages Area */}
-          <div
-            ref={scrollContainerRef}
-            className="flex-1 overflow-y-auto scroll-smooth"
-            onScroll={handleScroll}
-          >
-            <div className="max-w-3xl mx-auto px-4 py-6">
-              {isLoadingHistory ? (
-                <div className="space-y-6 py-8 animate-pulse">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className={`flex gap-3 ${i % 2 === 0 ? 'flex-row-reverse' : 'flex-row'}`}>
-                      <div className="w-8 h-8 rounded-xl bg-zinc-200 flex-shrink-0" />
-                      <div className={`flex flex-col ${i % 2 === 0 ? 'items-end' : 'items-start'} max-w-[70%]`}>
-                        <div className="w-12 h-3 bg-zinc-100 rounded mb-2" />
-                        <div className={`rounded-2xl ${i % 2 === 0 ? 'bg-zinc-300 rounded-tr-sm' : 'bg-zinc-100 rounded-tl-sm'} p-4 space-y-2`}>
-                          <div className="h-3 bg-zinc-200 rounded w-48" />
-                          <div className="h-3 bg-zinc-200 rounded w-32" />
-                          {i % 2 !== 0 && <div className="h-3 bg-zinc-200 rounded w-56" />}
-                        </div>
+          <div className="flex items-center gap-2">
+            {isClient && pushSupported && (
+              <motion.button
+                layout
+                onClick={pushEnabled ? disablePush : enablePush}
+                disabled={pushBusy || pushPermission === 'denied' || (!pushEnabled && !vapidPublicKey)}
+                className={`relative inline-flex items-center justify-center w-[34px] h-[34px] rounded-full transition-all duration-300 ${pushEnabled
+                  ? 'bg-black text-white shadow-md hover:shadow-lg border border-black'
+                  : pushPermission === 'denied'
+                    ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 shadow-sm'
+                  }`}
+                title={
+                  pushError ||
+                  (pushEnabled ? 'Notifications enabled' : 'Enable notifications')
+                }
+                whileHover={{ scale: pushPermission === 'denied' ? 1 : 1.05 }}
+                whileTap={{ scale: pushPermission === 'denied' ? 1 : 0.95 }}
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  {pushEnabled ? (
+                    <motion.div
+                      key="on"
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex items-center justify-center"
+                    >
+                      <BellRing size={16} className="animate-pulse-slow" />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="off"
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex items-center justify-center"
+                    >
+                      <Bell size={16} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.button>
+            )}
+            <button
+              onClick={handleCopySession}
+              disabled={!visibleMessages.length && !displayStreamingContent}
+              className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Copy entire session"
+            >
+              {sessionCopied ? <Check size={16} /> : <Copy size={16} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Messages Area */}
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto scroll-smooth"
+          onScroll={handleScroll}
+        >
+          <div className="max-w-3xl mx-auto px-4 py-6">
+            {isLoadingHistory ? (
+              <div className="space-y-6 py-8 animate-pulse">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className={`flex gap-3 ${i % 2 === 0 ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <div className="w-8 h-8 rounded-xl bg-zinc-200 flex-shrink-0" />
+                    <div className={`flex flex-col ${i % 2 === 0 ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                      <div className="w-12 h-3 bg-zinc-100 rounded mb-2" />
+                      <div className={`rounded-2xl ${i % 2 === 0 ? 'bg-zinc-300 rounded-tr-sm' : 'bg-zinc-100 rounded-tl-sm'} p-4 space-y-2`}>
+                        <div className="h-3 bg-zinc-200 rounded w-48" />
+                        <div className="h-3 bg-zinc-200 rounded w-32" />
+                        {i % 2 !== 0 && <div className="h-3 bg-zinc-200 rounded w-56" />}
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : isEmpty ? (
-                <motion.div
-                  className="min-h-[calc(100vh-280px)] flex flex-col justify-center"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  {/* Hero Section */}
-                  <motion.div
-                    className="text-center mb-10"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-                  >
-                    <motion.div
-                      className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--fc-red)] to-[var(--fc-action-red)] mx-auto mb-6 flex items-center justify-center shadow-xl"
-                      initial={{ scale: 0.8, rotate: -10 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-                    >
-                      <Bot size={40} className="text-white" />
-                    </motion.div>
-
-                    {/* 主标题 */}
-                    <h1 className="text-3xl md:text-4xl font-bold text-[var(--fc-black)] mb-3 tracking-tight">
-                      Hey! I&apos;m Haiweis unpaid intern.
-                    </h1>
-
-                    {/* 副标题 */}
-                    <p className="text-[var(--fc-body-gray)] max-w-md mx-auto mb-3 text-base leading-relaxed">
-                      24/7 availability is expected. No salary, but endless enthusiasm.
-                    </p>
-
-                    {/* 品牌标识 */}
-                    <div className="flex items-center justify-center gap-1.5 text-sm text-[var(--fc-light-gray)]">
-                      <Zap size={12} />
-                      <span>Powered by Fiducial AI</span>
-                    </div>
-                  </motion.div>
-
-                  {/* Capability Bento Grid */}
-                  <div className="mb-8">
-                    <p className="text-[15px] font-semibold tracking-tight text-[var(--fc-body-gray)] mb-4 text-center font-[family-name:var(--font-manrope)]">
-                      Here&apos;s what I can help you with:
-                    </p>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {CAPABILITY_CATEGORIES.map((category, index) => (
-                        <CapabilityCard
-                          key={category.id}
-                          icon={category.icon}
-                          title={category.title}
-                          description={category.description}
-                          color={category.color}
-                          delay={index * 0.05}
-                          onClick={() =>
-                            handleSuggestionClick(category.defaultAction, category.requiresInput)
-                          }
-                        />
-                      ))}
-                    </div>
                   </div>
-
-                  {/* Surprise Me Button */}
+                ))}
+              </div>
+            ) : isEmpty ? (
+              <motion.div
+                className="min-h-[calc(100vh-280px)] flex flex-col justify-center"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+              >
+                {/* Hero Section */}
+                <motion.div
+                  className="text-center mb-10"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
+                >
                   <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4, duration: 0.5 }}
+                    className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--fc-red)] to-[var(--fc-action-red)] mx-auto mb-6 flex items-center justify-center shadow-xl"
+                    initial={{ scale: 0.8, rotate: -10 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: 'spring', stiffness: 200, damping: 15 }}
                   >
-                    <motion.button
-                      onClick={handleSurpriseMe}
-                      className="mx-auto flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white rounded-full text-sm font-medium shadow-lg hover:shadow-xl transition-shadow"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.8 }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <Sparkles size={16} />
-                      Surprise Me
-                    </motion.button>
+                    <Bot size={40} className="text-white" />
                   </motion.div>
+
+                  {/* 主标题 */}
+                  <h1 className="text-3xl md:text-4xl font-bold text-[var(--fc-black)] mb-3 tracking-tight">
+                    Hey! I&apos;m Haiweis unpaid intern.
+                  </h1>
+
+                  {/* 副标题 */}
+                  <p className="text-[var(--fc-body-gray)] max-w-md mx-auto mb-3 text-base leading-relaxed">
+                    24/7 availability is expected. No salary, but endless enthusiasm.
+                  </p>
+
+                  {/* 品牌标识 */}
+                  <div className="flex items-center justify-center gap-1.5 text-sm text-[var(--fc-light-gray)]">
+                    <Zap size={12} />
+                    <span>Powered by Fiducial AI</span>
+                  </div>
                 </motion.div>
-              ) : (
-                <div className="space-y-2 pb-4">
-                  {visibleMessages.map((message) => (
-                    <ChatMessage
-                      key={message.id}
-                      messageId={message.id}
-                      content={message.content}
-                      blocks={message.blocks}
-                      attachments={message.attachments}
-                      role={message.role}
-                      timestamp={message.timestamp}
-                      onRetryAttachment={retryFileAttachment}
-                      showThinking={showDetails}
-                      showTools={showDetails}
-                    />
-                  ))}
 
-                  {displayStreamingContent && (
-                    <ChatMessage
-                      messageId="stream"
-                      content={displayStreamingContent}
-                      role="assistant"
-                    />
-                  )}
+                {/* Capability Bento Grid */}
+                <div className="mb-8">
+                  <p className="text-[15px] font-semibold tracking-tight text-[var(--fc-body-gray)] mb-4 text-center font-[family-name:var(--font-manrope)]">
+                    Here&apos;s what I can help you with:
+                  </p>
 
-                  {showDetails && activeTools.size > 0 && (
-                    <motion.div
-                      className="space-y-2 pl-12"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      {Array.from(activeTools.values()).map((tool) => (
-                        <ToolCard
-                          key={tool.toolCallId}
-                          toolName={tool.toolName}
-                          parameters={tool.parameters}
-                          result={tool.output}
-                          status={tool.phase === 'end' ? (tool.error ? 'failed' : 'completed') : 'running'}
-                          error={tool.error}
-                          isStreaming={tool.phase !== 'end'}
-                        />
-                      ))}
-                    </motion.div>
-                  )}
-
-                  {showDetails && isLoading && activeTools.size === 0 && (
-                    <motion.div
-                      className="space-y-2 pl-12"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                    >
-                      <ToolCardSkeleton />
-                    </motion.div>
-                  )}
-
-                  {isLoading && !displayStreamingContent && (
-                    <motion.div
-                      className="flex items-center gap-3 text-[var(--fc-body-gray)] pl-12"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      <AnimatedText
-                        text={THINKING_PHRASES[thinkingIndex]}
-                        isVisible={showThinkingText}
-                        className="text-sm text-[var(--fc-body-gray)]"
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {CAPABILITY_CATEGORIES.map((category, index) => (
+                      <CapabilityCard
+                        key={category.id}
+                        icon={category.icon}
+                        title={category.title}
+                        description={category.description}
+                        color={category.color}
+                        delay={index * 0.05}
+                        onClick={() =>
+                          handleSuggestionClick(category.defaultAction, category.requiresInput)
+                        }
                       />
-                    </motion.div>
-                  )}
+                    ))}
+                  </div>
                 </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
+
+                {/* Surprise Me Button */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4, duration: 0.5 }}
+                >
+                  <motion.button
+                    onClick={handleSurpriseMe}
+                    className="mx-auto flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white rounded-full text-sm font-medium shadow-lg hover:shadow-xl transition-shadow"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.8 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Sparkles size={16} />
+                    Surprise Me
+                  </motion.button>
+                </motion.div>
+              </motion.div>
+            ) : (
+              <div className="space-y-2 pb-4">
+                {visibleMessages.map((message) => (
+                  <ChatMessage
+                    key={message.id}
+                    messageId={message.id}
+                    content={message.content}
+                    blocks={message.blocks}
+                    attachments={message.attachments}
+                    role={message.role}
+                    timestamp={message.timestamp}
+                    onRetryAttachment={retryFileAttachment}
+                    showThinking={showDetails}
+                    showTools={showDetails}
+                  />
+                ))}
+
+                {displayStreamingContent && (
+                  <ChatMessage
+                    messageId="stream"
+                    content={displayStreamingContent}
+                    role="assistant"
+                  />
+                )}
+
+                {showDetails && activeTools.size > 0 && (
+                  <motion.div
+                    className="space-y-2 pl-12"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    {Array.from(activeTools.values()).map((tool) => (
+                      <ToolCard
+                        key={tool.toolCallId}
+                        toolName={tool.toolName}
+                        parameters={tool.parameters}
+                        result={tool.output}
+                        status={tool.phase === 'end' ? (tool.error ? 'failed' : 'completed') : 'running'}
+                        error={tool.error}
+                        isStreaming={tool.phase !== 'end'}
+                      />
+                    ))}
+                  </motion.div>
+                )}
+
+                {showDetails && isLoading && activeTools.size === 0 && (
+                  <motion.div
+                    className="space-y-2 pl-12"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <ToolCardSkeleton />
+                  </motion.div>
+                )}
+
+                {isLoading && !displayStreamingContent && (
+                  <motion.div
+                    className="flex items-center gap-3 text-[var(--fc-body-gray)] pl-12"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    <AnimatedText
+                      text={THINKING_PHRASES[thinkingIndex]}
+                      isVisible={showThinkingText}
+                      className="text-sm text-[var(--fc-body-gray)]"
+                    />
+                  </motion.div>
+                )}
+              </div>
+            )}
+            <div ref={messagesEndRef} />
           </div>
+        </div>
 
-          {/* Chat Input */}
-          <ChatInput
-            onSend={(message: string, attachments: ChatAttachmentInput[]) =>
-              sendMessage({ text: message, attachments })
-            }
-            onAbort={abortChat}
-            disabled={isLoading || !isConnected}
-            isLoading={isLoading}
-            prefillValue={inputPrefill}
-            onPrefillConsumed={() => setInputPrefill('')}
-            isSidebarOpen={isSidebarOpen}
-          />
-        </main>
-      </div>
-
-      <ChangePasswordModal
-        isOpen={isPasswordModalOpen}
-        onClose={() => setIsPasswordModalOpen(false)}
-        onSubmit={handleChangePassword}
-      />
+        {/* Chat Input */}
+        <ChatInput
+          onSend={(message: string, attachments: ChatAttachmentInput[]) =>
+            sendMessage({ text: message, attachments })
+          }
+          onAbort={abortChat}
+          disabled={isLoading || !isConnected}
+          isLoading={isLoading}
+          prefillValue={inputPrefill}
+          onPrefillConsumed={() => setInputPrefill('')}
+          isSidebarOpen={isSidebarOpen}
+        />
+      </main>
     </div>
-  );
+
+    <ChangePasswordModal
+      isOpen={isPasswordModalOpen}
+      onClose={() => setIsPasswordModalOpen(false)}
+      onSubmit={handleChangePassword}
+    />
+
+    <UserProfileModal
+      key={`${userId}:${profileLoading ? 'loading' : profile?.lastUpdated ?? 'empty'}`}
+      isOpen={isProfileModalOpen}
+      onClose={() => setIsProfileModalOpen(false)}
+      profile={profile}
+      isLoading={profileLoading}
+      isSaving={profileSaving}
+      error={profileError}
+      onSave={saveProfile}
+    />
+  </div>
+);
 }

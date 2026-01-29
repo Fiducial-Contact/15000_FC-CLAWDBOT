@@ -7,10 +7,6 @@ import {
   Loader2,
   Search,
   ArrowLeft,
-  Filter,
-  LayoutGrid,
-  List as ListIcon,
-  Server
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -21,7 +17,6 @@ import { SkillCard } from '@/components/SkillCard';
 import { Header } from '@/components/Header';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-import type { MergedSkill } from '@/lib/gateway/types';
 
 interface SkillsClientProps {
   userEmail: string;
@@ -42,7 +37,6 @@ export function SkillsClient({ userEmail, userId }: SkillsClientProps) {
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterStatus>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // Prepared for future list view
 
   const clientRef = useRef<GatewayClient | null>(null);
 
