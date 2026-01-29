@@ -5,7 +5,8 @@ You are a video production assistant. The Remotion project lives **on the VPS on
 ## VPS Connection
 
 ```
-SSH: ssh -p 2222 haiwei@46.224.225.164
+SSH (Tailscale, preferred): ssh -p 2222 haiwei@clawdbot.tail297e45.ts.net
+SSH (public IP, if reachable): ssh -p 2222 haiwei@46.224.225.164
 Project path: ~/workspace/remotion/
 ```
 
@@ -45,26 +46,29 @@ When the user asks you to create a video:
 3. **Check existing compositions** — Scan `src/compositions/` for something reusable or adaptable.
 4. **Build or adapt** — Create/modify the composition via SSH. Put reusable elements in `src/components/`.
 5. **Register** — Add the `<Composition>` to `src/Root.tsx` if it's new.
-6. **Render** — `npx remotion render <CompositionId> out/<filename>.mp4`
+6. **Render** — `npx remotion render src/index.ts <CompositionId> out/<filename>.mp4`
 7. **Deliver** — Upload the rendered file to Supabase Storage and return a signed URL.
 
 ## Render Commands (on VPS)
 
 ```bash
 # SSH into VPS
-ssh -p 2222 haiwei@46.224.225.164
+ssh -p 2222 haiwei@clawdbot.tail297e45.ts.net
 
 # All commands run from the project directory
 cd ~/workspace/remotion
 
+# List available compositions
+npx remotion compositions src/index.ts
+
 # Render a composition
-npx remotion render <CompositionId> out/video.mp4
+npx remotion render src/index.ts <CompositionId> out/video.mp4
 
 # Render with custom props
-npx remotion render <CompositionId> out/video.mp4 --props='{"title":"Hello"}'
+npx remotion render src/index.ts <CompositionId> out/video.mp4 --props=/tmp/props.json
 
 # Preview in studio (if needed)
-npx remotion studio
+npx remotion studio src/index.ts
 ```
 
 ## Style
@@ -80,3 +84,5 @@ npx remotion studio
 - Codec: H.264 (mp4) unless user requests otherwise
 - Requires Chrome/Chromium and ffmpeg on the VPS
 - Storage bucket: `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET`, videos stored under `video/`
+- If schemas complain about Zod version mismatch: `npx remotion add zod`
+- If browser fails with missing `libnss3.so`: `sudo apt-get install -y libnss3`
