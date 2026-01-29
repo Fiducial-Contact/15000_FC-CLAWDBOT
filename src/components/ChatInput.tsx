@@ -266,241 +266,245 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading, prefillValue, 
       <div className="w-full px-4 pb-4 pt-2">
         <motion.div
           ref={containerRef}
-          className={`relative max-w-3xl mx-auto bg-white rounded-2xl border-2 shadow-[var(--shadow-md)] transition-colors duration-300 ${
-            isDragging
-              ? 'border-[var(--fc-action-red)] border-dashed bg-red-50/30'
-              : isPrefillHighlight
-                ? 'animate-breathing-glow'
-                : 'border-[var(--fc-border-gray)] hover:border-[var(--fc-light-gray)]'
-          }`}
+          className={`relative max-w-3xl mx-auto bg-white rounded-2xl border-2 shadow-[var(--shadow-md)] transition-colors duration-300 ${isDragging
+            ? 'border-[var(--fc-action-red)] border-dashed bg-red-50/30'
+            : isPrefillHighlight
+              ? 'animate-breathing-glow'
+              : 'border-[var(--fc-border-gray)] hover:border-[var(--fc-light-gray)]'
+            }`}
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-        {/* Drag Overlay */}
-        <AnimatePresence>
-          {isDragging && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl bg-red-50/80 backdrop-blur-sm pointer-events-none"
-            >
-              <div className="flex flex-col items-center gap-2 text-[var(--fc-action-red)]">
-                <Upload size={32} strokeWidth={1.5} />
-                <span className="text-sm font-medium">Drop files here</span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Attachment Preview */}
-        {attachments.length > 0 && (
-          <div className="px-4 pt-3 flex flex-wrap gap-2">
-            {attachments.map((item) => (
+          {/* Drag Overlay */}
+          <AnimatePresence>
+            {isDragging && (
               <motion.div
-                key={item.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="relative group"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl bg-red-50/80 backdrop-blur-sm pointer-events-none"
               >
-                {item.kind === 'image' && item.previewUrl ? (
-                  <div className="relative">
-                    <img
-                      src={item.previewUrl}
-                      alt={item.file.name}
-                      className="w-20 h-20 rounded-xl object-cover border border-[var(--fc-border-gray)] shadow-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeAttachment(item.id)}
-                      className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center rounded-full bg-[var(--fc-charcoal)] text-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--fc-action-red)]"
-                      aria-label="Remove"
-                    >
-                      <X size={12} strokeWidth={2.5} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2.5 bg-[var(--fc-off-white)] border border-[var(--fc-border-gray)] rounded-xl px-3 py-2.5 pr-10">
-                    <div className="w-10 h-10 rounded-lg bg-white border border-[var(--fc-border-gray)] flex items-center justify-center flex-shrink-0">
-                      <FileText size={18} className="text-[var(--fc-action-red)]" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[12px] font-medium text-[var(--fc-black)] truncate max-w-[140px]">
-                        {item.file.name}
-                      </p>
-                      <p className="text-[10px] text-[var(--fc-light-gray)]">
-                        {formatFileSize(item.file.size)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeAttachment(item.id)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full text-[var(--fc-light-gray)] hover:text-[var(--fc-action-red)] hover:bg-red-50 transition-colors"
-                      aria-label="Remove"
-                    >
-                      <X size={14} strokeWidth={2} />
-                    </button>
-                  </div>
-                )}
+                <div className="flex flex-col items-center gap-2 text-[var(--fc-action-red)]">
+                  <Upload size={32} strokeWidth={1.5} />
+                  <span className="text-sm font-medium">Drop files here</span>
+                </div>
               </motion.div>
-            ))}
-          </div>
-        )}
+            )}
+          </AnimatePresence>
 
-        {/* Attachment Error */}
-        <AnimatePresence>
-          {attachmentError && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="px-4 pt-2"
-            >
-              <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 rounded-lg px-3 py-2">
-                <AlertCircle size={14} />
-                <span>{attachmentError}</span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Input Area */}
-        <div className="px-4 pt-3 pb-2 relative">
-          <textarea
-            ref={inputRef}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            disabled={disabled}
-            rows={1}
-            aria-label="Message input"
-            className="w-full bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2 resize-none text-[15px] text-[var(--fc-black)] placeholder:text-transparent leading-relaxed min-h-[24px] max-h-[200px] rounded-lg"
-            style={{ fontFamily: 'inherit' }}
-          />
-          
-          {/* Animated Placeholder */}
-          <div className="absolute left-4 top-3 pointer-events-none flex items-center">
-            <AnimatedText
-              text={PLACEHOLDERS[placeholderIndex]}
-              isVisible={showPlaceholder && !isFocused && !inputValue}
-              className="text-[var(--fc-light-gray)] text-[15px] select-none"
-            />
-          </div>
-        </div>
-
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-3 pb-3">
-          {/* Left Tools */}
-          <div className="flex items-center gap-1">
-            {/* Attach Button */}
-            <button
-              className="p-2 rounded-lg text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2"
-              title="Attach file"
-              aria-label="Attach file"
-              type="button"
-              disabled={disabled}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Paperclip size={18} />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={handleFileInputChange}
-              accept="image/*,audio/*,video/*,application/pdf,text/*"
-              disabled={disabled}
-            />
-
-            {/* Think Mode */}
-            <button
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-200 ${
-                thinkActive
-                  ? 'bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 border border-amber-200'
-                  : 'text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)]'
-              }`}
-              onClick={() => setThinkActive(!thinkActive)}
-              type="button"
-              disabled={disabled}
-            >
-              <Sparkles size={13} className={thinkActive ? 'fill-amber-500 text-amber-500' : ''} />
-              <span>Think</span>
-            </button>
-
-            {/* Search Mode */}
-            <button
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-200 ${
-                deepSearchActive
-                  ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border border-blue-200'
-                  : 'text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)]'
-              }`}
-              onClick={() => setDeepSearchActive(!deepSearchActive)}
-              type="button"
-              disabled={disabled}
-            >
-              <Globe size={13} className={deepSearchActive ? 'fill-blue-500 text-blue-500' : ''} />
-              <span>Search</span>
-            </button>
-
-            {/* Mic Button - Only show when empty */}
-            <AnimatePresence>
-              {!hasContent && !isLoading && (
-                <motion.button
-                  initial={{ opacity: 0, scale: 0.8 }}
+          {/* Attachment Preview */}
+          {attachments.length > 0 && (
+            <div className="px-4 pt-3 flex flex-wrap gap-2">
+              {attachments.map((item) => (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ duration: 0.15 }}
-                  className="p-2 rounded-lg text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2"
-                  type="button"
-                  disabled={disabled}
-                  aria-label="Voice input"
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="relative group"
                 >
-                  <Mic size={18} />
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
+                  {item.kind === 'image' && item.previewUrl ? (
+                    <div className="relative">
+                      <img
+                        src={item.previewUrl}
+                        alt={item.file.name}
+                        className="w-20 h-20 rounded-xl object-cover border border-[var(--fc-border-gray)] shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(item.id)}
+                        className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center rounded-full bg-[var(--fc-charcoal)] text-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--fc-action-red)]"
+                        aria-label="Remove"
+                      >
+                        <X size={12} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2.5 bg-[var(--fc-off-white)] border border-[var(--fc-border-gray)] rounded-xl px-3 py-2.5 pr-10">
+                      <div className="w-10 h-10 rounded-lg bg-white border border-[var(--fc-border-gray)] flex items-center justify-center flex-shrink-0">
+                        <FileText size={18} className="text-[var(--fc-action-red)]" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-medium text-[var(--fc-black)] truncate max-w-[140px]">
+                          {item.file.name}
+                        </p>
+                        <p className="text-[10px] text-[var(--fc-light-gray)]">
+                          {formatFileSize(item.file.size)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(item.id)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full text-[var(--fc-light-gray)] hover:text-[var(--fc-action-red)] hover:bg-red-50 transition-colors"
+                        aria-label="Remove"
+                      >
+                        <X size={14} strokeWidth={2} />
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          )}
 
-          {/* Right Tools */}
-          <div className="flex items-center gap-2">
-            {/* Send/Stop Button */}
-            {isLoading ? (
-              <motion.button
-                initial={{ scale: 0.8 }}
-                animate={{ scale: 1 }}
-                className="flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white shadow-lg hover:shadow-xl transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2"
-                onClick={onAbort}
-                title="Stop generating"
-                aria-label="Stop generating"
-                type="button"
+          {/* Attachment Error */}
+          <AnimatePresence>
+            {attachmentError && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="px-4 pt-2"
               >
-                <Square size={14} className="fill-current" />
-              </motion.button>
-            ) : (
-              <button
-                className={`flex items-center justify-center w-11 h-11 rounded-xl transition-all duration-300 focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2 ${
-                  hasContent
+                <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                  <AlertCircle size={14} />
+                  <span>{attachmentError}</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Main Content Area with Send Button */}
+          <div className="flex">
+            {/* Left: Input + Toolbar */}
+            <div className="flex-1 min-w-0">
+              {/* Input Area */}
+              <div className="px-4 pt-3 pb-2 relative">
+                <textarea
+                  ref={inputRef}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  rows={1}
+                  aria-label="Message input"
+                  className="w-full bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2 resize-none text-[15px] text-[var(--fc-black)] placeholder:text-transparent leading-relaxed min-h-[24px] max-h-[200px] rounded-lg"
+                  style={{ fontFamily: 'inherit' }}
+                />
+
+                {/* Animated Placeholder */}
+                <div className="absolute left-4 top-3 pointer-events-none flex items-center">
+                  <AnimatedText
+                    text={PLACEHOLDERS[placeholderIndex]}
+                    isVisible={showPlaceholder && !isFocused && !inputValue}
+                    className="text-[var(--fc-light-gray)] text-[15px] select-none"
+                  />
+                </div>
+              </div>
+
+              {/* Toolbar */}
+              <div className="flex items-center px-3 pb-3">
+                {/* Left Tools */}
+                <div className="flex items-center gap-1">
+                  {/* Attach Button */}
+                  <button
+                    className="p-2 rounded-lg text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2"
+                    title="Attach file"
+                    aria-label="Attach file"
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Paperclip size={18} />
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileInputChange}
+                    accept="image/*,audio/*,video/*,application/pdf,text/*"
+                    disabled={disabled}
+                  />
+
+                  {/* Think Mode */}
+                  <motion.button
+                    layout
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-all duration-300 ${thinkActive
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200 shadow-sm hover:bg-amber-100'
+                        : 'text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] border border-transparent'
+                      }`}
+                    onClick={() => setThinkActive(!thinkActive)}
+                    type="button"
+                    disabled={disabled}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    <Sparkles size={13} className={thinkActive ? 'text-amber-500 fill-amber-500' : ''} />
+                    <span>Think</span>
+                  </motion.button>
+
+                  {/* Search Mode */}
+                  <motion.button
+                    layout
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-all duration-300 ${deepSearchActive
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm hover:bg-blue-100'
+                        : 'text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] border border-transparent'
+                      }`}
+                    onClick={() => setDeepSearchActive(!deepSearchActive)}
+                    type="button"
+                    disabled={disabled}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    <Globe size={13} className={deepSearchActive ? 'text-blue-600' : ''} />
+                    <span>Search</span>
+                  </motion.button>
+
+                  {/* Mic Button - Only show when empty */}
+                  <AnimatePresence>
+                    {!hasContent && !isLoading && (
+                      <motion.button
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        transition={{ duration: 0.15 }}
+                        className="p-2 rounded-lg text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)] hover:text-[var(--fc-black)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2"
+                        type="button"
+                        disabled={disabled}
+                        aria-label="Voice input"
+                      >
+                        <Mic size={18} />
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Send Button - Vertically Centered */}
+            <div className="flex items-center pr-3 pl-1">
+              {isLoading ? (
+                <motion.button
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  className="flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white shadow-lg hover:shadow-xl transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2"
+                  onClick={onAbort}
+                  title="Stop generating"
+                  aria-label="Stop generating"
+                  type="button"
+                >
+                  <Square size={14} className="fill-current" />
+                </motion.button>
+              ) : (
+                <button
+                  className={`flex items-center justify-center w-11 h-11 rounded-xl transition-all duration-300 focus-visible:ring-2 focus-visible:ring-[var(--fc-action-red)] focus-visible:ring-offset-2 ${hasContent
                     ? 'bg-[var(--fc-black)] text-white shadow-lg hover:shadow-xl hover:scale-105 active:scale-95'
                     : 'bg-[var(--fc-subtle-gray)] text-[var(--fc-light-gray)] cursor-not-allowed'
-                }`}
-                disabled={!hasContent || disabled}
-                onClick={handleSubmit}
-                type="button"
-                aria-label="Send message"
-              >
-                <Send size={18} className={hasContent ? 'ml-0.5' : ''} />
-              </button>
-            )}
+                    }`}
+                  disabled={!hasContent || disabled}
+                  onClick={handleSubmit}
+                  type="button"
+                  aria-label="Send message"
+                >
+                  <Send size={18} className={hasContent ? 'ml-0.5' : ''} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
 
         {/* Footer hint */}
         <p className="text-center text-[11px] text-[var(--fc-light-gray)] mt-2">
