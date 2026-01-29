@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client';
 
-const DEFAULT_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim();
+const DEFAULT_BUCKET = 'webchat-uploads';
 const DEFAULT_TTL_SECONDS = Number(process.env.NEXT_PUBLIC_SUPABASE_SIGNED_URL_TTL_SECONDS || 3600);
 
 function sanitizeFileName(name: string) {
