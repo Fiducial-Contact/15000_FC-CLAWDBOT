@@ -161,12 +161,34 @@ function generateSessionId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function stripAttachmentMetadata(text: string): string {
-  return text
+function parseAttachmentMetadata(text: string): {
+  cleanText: string;
+  attachments: ChatAttachment[];
+} {
+  const attachments: ChatAttachment[] = [];
+  const pattern = /(?:Image|File): ([^\n]*)\nURL: ([^\n]*)/g;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    const name = match[1].trim();
+    const url = match[2].trim();
+    const isImage = match[0].startsWith('Image:');
+    attachments.push({
+      id: crypto.randomUUID(),
+      kind: isImage ? 'image' : 'file',
+      fileName: name,
+      mimeType: isImage ? 'image/jpeg' : 'application/octet-stream',
+      size: 0,
+      url,
+      previewUrl: isImage ? url : undefined,
+      status: 'ready',
+    });
+  }
+  const cleanText = text
     .replace(/\n\n(?:(?:Image|File): [^\n]*\nURL: [^\n]*(?:\n|$))+/g, '')
     .replace(/^(?:(?:Image|File): [^\n]*\nURL: [^\n]*(?:\n|$))+/g, '')
     .replace(/^Attached (?:image|file)\(s\)\.$/g, '')
     .trim();
+  return { cleanText, attachments };
 }
 
 function generateSessionTitle(message: string): string {
@@ -794,14 +816,17 @@ export function useGateway({ userId }: UseGatewayOptions) {
                   },
                 ] as ChatContentBlock[])
               : normalizeContentBlocks(m.content);
+            const isUser = m.role === 'user';
+            const parsed = isUser && !isToolResult ? parseAttachmentMetadata(contentText) : null;
             return {
               id: `hist_${sessionHash}_${loadTime}_${idx}`,
               sessionKey: currentSessionKey,
-              content: isToolResult ? '' : (m.role === 'user' ? stripAttachmentMetadata(contentText) : contentText),
-              role: m.role === 'user' ? 'user' : 'assistant',
+              content: isToolResult ? '' : (parsed ? parsed.cleanText : contentText),
+              role: isUser ? 'user' : 'assistant',
               isToolResult,
               timestamp: '',
               blocks: blocks.length > 0 ? blocks : undefined,
+              attachments: parsed && parsed.attachments.length > 0 ? parsed.attachments : undefined,
               sent: true,
             };
           });
