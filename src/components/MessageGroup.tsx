@@ -11,6 +11,8 @@ import type { ChatAttachment, ChatContentBlock, ToolCallBlock, ThinkingBlock as 
 import { isToolCallBlock, isThinkingBlock } from '@/lib/gateway/types';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCard } from './ToolCard';
+import { VideoLightbox, type VideoItem } from './VideoLightbox';
+import { VideoPreviewCard } from './VideoPreviewCard';
 
 interface Message {
   id: string;
@@ -408,6 +410,72 @@ function extractMarkdownImages(content: string): { images: Array<{ src: string; 
   return { images, cleanedContent: cleanedContent.trim() };
 }
 
+const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm', '.m4v'];
+const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+const RAW_URL_REGEX = /https?:\/\/[^\s<>()]+/g;
+
+function isVideoUrl(value: string) {
+  if (!value) return false;
+  const normalized = value.split('#')[0]?.split('?')[0]?.toLowerCase() ?? '';
+  return VIDEO_EXTENSIONS.some((ext) => normalized.endsWith(ext));
+}
+
+function guessLabelFromUrl(value: string) {
+  const fallback = 'Video';
+  if (!value) return fallback;
+  try {
+    const url = new URL(value);
+    const base = url.pathname.split('/').filter(Boolean).pop();
+    return decodeURIComponent(base || fallback);
+  } catch {
+    const base = value.split('#')[0]?.split('?')[0]?.split('/').filter(Boolean).pop();
+    return base || fallback;
+  }
+}
+
+function extractVideoLinks(content: string): { videos: VideoItem[]; cleanedContent: string } {
+  const bySrc = new Map<string, VideoItem>();
+
+  let intermediate = content.replace(MARKDOWN_LINK_REGEX, (match, label, url) => {
+    if (typeof url === 'string' && isVideoUrl(url)) {
+      const textLabel = typeof label === 'string' && label.trim().length > 0 ? label.trim() : guessLabelFromUrl(url);
+      bySrc.set(url, { src: url, label: textLabel });
+      return textLabel;
+    }
+    return match;
+  });
+
+  intermediate = intermediate.replace(RAW_URL_REGEX, (match) => {
+    const trimmed = match.replace(/[),.;!?]+$/, '');
+    if (isVideoUrl(trimmed)) {
+      if (!bySrc.has(trimmed)) {
+        bySrc.set(trimmed, { src: trimmed, label: guessLabelFromUrl(trimmed) });
+      }
+      return '';
+    }
+    return match;
+  });
+
+  const cleanedContent = intermediate
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
+  return { videos: Array.from(bySrc.values()), cleanedContent };
+}
+
+function isVideoAttachment(file: ChatAttachment) {
+  if (!file) return false;
+  if (typeof file.mimeType === 'string' && file.mimeType.toLowerCase().startsWith('video/')) return true;
+  if (typeof file.url === 'string' && isVideoUrl(file.url)) return true;
+  if (typeof file.previewUrl === 'string' && isVideoUrl(file.previewUrl)) return true;
+  if (typeof file.fileName === 'string') {
+    const lower = file.fileName.toLowerCase();
+    return VIDEO_EXTENSIONS.some((ext) => lower.endsWith(ext));
+  }
+  return false;
+}
+
 export const MessageGroup = memo(function MessageGroup({
   messages,
   role,
@@ -416,15 +484,18 @@ export const MessageGroup = memo(function MessageGroup({
   onRetryAttachment,
 }: MessageGroupProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [videoLightboxIndex, setVideoLightboxIndex] = useState<number | null>(null);
   const isUser = role === 'user';
 
   const aggregated = useMemo(() => {
     const allThinking: Array<{ messageId: string; block: ThinkingBlockType }> = [];
     const allTools: Array<{ messageId: string; block: ToolCallBlock }> = [];
     const allImages: { src: string; label: string }[] = [];
+    const allVideos: VideoItem[] = [];
     const allFiles: ChatAttachment[] = [];
     const textParts: { messageId: string; content: string }[] = [];
     const seenImages = new Set<string>();
+    const seenVideos = new Set<string>();
 
     for (const message of messages) {
       const blocks = message.blocks || [];
@@ -435,7 +506,17 @@ export const MessageGroup = memo(function MessageGroup({
 
       const imageAttachments = attachments.filter((a) => a.kind === 'image');
       const fileAttachments = attachments.filter((a) => a.kind === 'file');
-      fileAttachments.forEach((f) => allFiles.push(f));
+      fileAttachments.forEach((f) => {
+        if (isVideoAttachment(f)) {
+          const src = f.url || f.previewUrl || '';
+          if (src && !seenVideos.has(src)) {
+            seenVideos.add(src);
+            allVideos.push({ src, label: f.fileName || guessLabelFromUrl(src) });
+          }
+        } else {
+          allFiles.push(f);
+        }
+      });
 
       imageAttachments.forEach((a) => {
         const src = a.previewUrl || a.url || '';
@@ -461,18 +542,26 @@ export const MessageGroup = memo(function MessageGroup({
         }
       });
 
-      const displayContent = isUser ? message.content : cleanedContent;
+      const { videos: mdVideos, cleanedContent: cleanedContentWithoutMedia } = extractVideoLinks(cleanedContent);
+      mdVideos.forEach((video) => {
+        if (video.src && !seenVideos.has(video.src)) {
+          seenVideos.add(video.src);
+          allVideos.push(video);
+        }
+      });
+
+      const displayContent = isUser ? message.content : cleanedContentWithoutMedia;
       if (displayContent?.trim()) {
         textParts.push({ messageId: message.id, content: displayContent });
       }
     }
 
-    return { allThinking, allTools, allImages, allFiles, textParts };
+    return { allThinking, allTools, allImages, allVideos, allFiles, textParts };
   }, [messages, isUser]);
 
-  const { allThinking, allTools, allImages, allFiles, textParts } = aggregated;
+  const { allThinking, allTools, allImages, allVideos, allFiles, textParts } = aggregated;
 
-  const hasContent = textParts.length > 0 || allImages.length > 0 || allFiles.length > 0;
+  const hasContent = textParts.length > 0 || allImages.length > 0 || allVideos.length > 0 || allFiles.length > 0;
   const hasRenderableBlocks = !isUser && ((showThinking && allThinking.length > 0) || (showTools && allTools.length > 0));
 
   if (!hasContent && !hasRenderableBlocks) return null;
@@ -528,9 +617,20 @@ export const MessageGroup = memo(function MessageGroup({
                   ? 'bg-[var(--fc-charcoal)] text-white rounded-2xl rounded-tr-sm'
                   : 'bg-white text-[var(--fc-black)] rounded-2xl rounded-tl-sm shadow-sm border border-[var(--fc-border-gray)]'
               }`}>
-                {idx === 0 && (allImages.length > 0 || allFiles.length > 0) && (
+                {idx === 0 && (allImages.length > 0 || allVideos.length > 0 || allFiles.length > 0) && (
                   <div className="space-y-3 mb-3">
                     {allImages.length > 0 && <ImageGrid images={allImages} onImageClick={setLightboxIndex} />}
+                    {allVideos.length > 0 && (
+                      <div className="grid grid-cols-1 gap-2 max-w-sm">
+                        {allVideos.map((video, index) => (
+                          <VideoPreviewCard
+                            key={video.src}
+                            video={video}
+                            onOpen={() => setVideoLightboxIndex(index)}
+                          />
+                        ))}
+                      </div>
+                    )}
                     {allFiles.length > 0 && (
                       <div className="space-y-2">
                         {allFiles.map((file) => (
@@ -560,7 +660,7 @@ export const MessageGroup = memo(function MessageGroup({
             </div>
           ))}
 
-          {textParts.length === 0 && (allImages.length > 0 || allFiles.length > 0) && (
+          {textParts.length === 0 && (allImages.length > 0 || allVideos.length > 0 || allFiles.length > 0) && (
             <div className={`px-4 py-3 max-w-full ${
               isUser
                 ? 'bg-[var(--fc-charcoal)] text-white rounded-2xl rounded-tr-sm'
@@ -568,6 +668,17 @@ export const MessageGroup = memo(function MessageGroup({
             }`}>
               <div className="space-y-3">
                 {allImages.length > 0 && <ImageGrid images={allImages} onImageClick={setLightboxIndex} />}
+                {allVideos.length > 0 && (
+                  <div className="grid grid-cols-1 gap-2 max-w-sm">
+                    {allVideos.map((video, index) => (
+                      <VideoPreviewCard
+                        key={video.src}
+                        video={video}
+                        onOpen={() => setVideoLightboxIndex(index)}
+                      />
+                    ))}
+                  </div>
+                )}
                 {allFiles.length > 0 && (
                   <div className="space-y-2">
                     {allFiles.map((file) => (
@@ -589,6 +700,13 @@ export const MessageGroup = memo(function MessageGroup({
       <AnimatePresence>
         {lightboxIndex !== null && allImages.length > 0 && (
           <Lightbox images={allImages} initialIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
+        )}
+        {videoLightboxIndex !== null && allVideos.length > 0 && (
+          <VideoLightbox
+            videos={allVideos}
+            initialIndex={videoLightboxIndex}
+            onClose={() => setVideoLightboxIndex(null)}
+          />
         )}
       </AnimatePresence>
     </motion.div>

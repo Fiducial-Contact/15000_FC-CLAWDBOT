@@ -11,6 +11,8 @@ import type { ChatAttachment, ChatContentBlock, ToolCallBlock, ThinkingBlock as 
 import { isToolCallBlock, isThinkingBlock } from '@/lib/gateway/types';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCard } from './ToolCard';
+import { VideoLightbox, type VideoItem } from './VideoLightbox';
+import { VideoPreviewCard } from './VideoPreviewCard';
 
 interface ChatMessageProps {
   messageId: string;
@@ -561,6 +563,74 @@ function extractMarkdownImages(content: string): { images: Array<{ src: string; 
   return { images, cleanedContent: cleanedContent.trim() };
 }
 
+const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm', '.m4v'];
+const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+const RAW_URL_REGEX = /https?:\/\/[^\s<>()]+/g;
+
+function isVideoUrl(value: string) {
+  if (!value) return false;
+  const normalized = value.split('#')[0]?.split('?')[0]?.toLowerCase() ?? '';
+  return VIDEO_EXTENSIONS.some((ext) => normalized.endsWith(ext));
+}
+
+function guessLabelFromUrl(value: string) {
+  const fallback = 'Video';
+  if (!value) return fallback;
+  try {
+    const url = new URL(value);
+    const base = url.pathname.split('/').filter(Boolean).pop();
+    return decodeURIComponent(base || fallback);
+  } catch {
+    const base = value.split('#')[0]?.split('?')[0]?.split('/').filter(Boolean).pop();
+    return base || fallback;
+  }
+}
+
+function extractVideoLinks(content: string): { videos: VideoItem[]; cleanedContent: string } {
+  const bySrc = new Map<string, VideoItem>();
+
+  // Convert markdown links pointing to videos into plain text, and collect the video URL.
+  let intermediate = content.replace(MARKDOWN_LINK_REGEX, (match, label, url) => {
+    if (typeof url === 'string' && isVideoUrl(url)) {
+      const textLabel = typeof label === 'string' && label.trim().length > 0 ? label.trim() : guessLabelFromUrl(url);
+      bySrc.set(url, { src: url, label: textLabel });
+      return textLabel;
+    }
+    return match;
+  });
+
+  // Extract raw video URLs and remove them from the visible text (previews will be shown separately).
+  intermediate = intermediate.replace(RAW_URL_REGEX, (match) => {
+    const trimmed = match.replace(/[),.;!?]+$/, '');
+    if (isVideoUrl(trimmed)) {
+      if (!bySrc.has(trimmed)) {
+        bySrc.set(trimmed, { src: trimmed, label: guessLabelFromUrl(trimmed) });
+      }
+      return '';
+    }
+    return match;
+  });
+
+  const cleanedContent = intermediate
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
+  return { videos: Array.from(bySrc.values()), cleanedContent };
+}
+
+function isVideoAttachment(file: ChatAttachment) {
+  if (!file) return false;
+  if (typeof file.mimeType === 'string' && file.mimeType.toLowerCase().startsWith('video/')) return true;
+  if (typeof file.url === 'string' && isVideoUrl(file.url)) return true;
+  if (typeof file.previewUrl === 'string' && isVideoUrl(file.previewUrl)) return true;
+  if (typeof file.fileName === 'string') {
+    const lower = file.fileName.toLowerCase();
+    return VIDEO_EXTENSIONS.some((ext) => lower.endsWith(ext));
+  }
+  return false;
+}
+
 export const ChatMessage = memo(function ChatMessage({
   messageId,
   content,
@@ -575,6 +645,7 @@ export const ChatMessage = memo(function ChatMessage({
   isStreaming = false,
 }: ChatMessageProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [videoLightboxIndex, setVideoLightboxIndex] = useState<number | null>(null);
   const isUser = role === 'user';
   const showHeader = !isGroupContinuation;
   const imageAttachments = (attachments || []).filter((item) => item.kind === 'image');
@@ -587,7 +658,8 @@ export const ChatMessage = memo(function ChatMessage({
     .filter((block) => block.text && block.text.trim().length > 0) as ThinkingBlockType[];
   const toolCallBlocks = (blocks || []).filter(isToolCallBlock) as ToolCallBlock[];
 
-  const { images: markdownImages, cleanedContent } = extractMarkdownImages(content || '');
+  const { images: markdownImages, cleanedContent: contentWithoutMarkdownImages } = extractMarkdownImages(content || '');
+  const { videos: contentVideos, cleanedContent: contentWithoutMediaLinks } = extractVideoLinks(contentWithoutMarkdownImages);
 
   const imageSources = new Map<string, { src: string; label: string }>();
   imageAttachments.forEach((item) => {
@@ -610,9 +682,27 @@ export const ChatMessage = memo(function ChatMessage({
 
   const images = Array.from(imageSources.values());
 
-  const displayContent = isUser ? content : cleanedContent;
+  const videoSources = new Map<string, VideoItem>();
+  const videoAttachments = fileAttachments.filter(isVideoAttachment);
+  const nonVideoFileAttachments = fileAttachments.filter((file) => !isVideoAttachment(file));
+
+  videoAttachments.forEach((file) => {
+    const src = file.url || file.previewUrl || '';
+    if (src) {
+      videoSources.set(src, { src, label: file.fileName || guessLabelFromUrl(src) });
+    }
+  });
+  contentVideos.forEach((video) => {
+    if (video.src && !videoSources.has(video.src)) {
+      videoSources.set(video.src, video);
+    }
+  });
+
+  const videos = Array.from(videoSources.values());
+
+  const displayContent = isUser ? content : contentWithoutMediaLinks;
   const hasContent = displayContent && displayContent.trim().length > 0;
-  const hasMedia = images.length > 0 || fileAttachments.length > 0;
+  const hasMedia = images.length > 0 || videos.length > 0 || nonVideoFileAttachments.length > 0;
   const hasRenderableBlocks =
     !isUser &&
     ((showThinking && thinkingBlocks.length > 0) || (showTools && toolCallBlocks.length > 0));
@@ -678,14 +768,25 @@ export const ChatMessage = memo(function ChatMessage({
                     : 'bg-white text-[var(--fc-black)] rounded-2xl rounded-tl-sm shadow-sm border border-[var(--fc-border-gray)]'
                   } ${isStreaming ? 'min-w-[180px]' : ''}`}
               >
-                {(images.length > 0 || fileAttachments.length > 0) && (
+                {(images.length > 0 || videos.length > 0 || nonVideoFileAttachments.length > 0) && (
                   <div className="space-y-3 mb-3">
                     {images.length > 0 && (
                       <ImageGrid images={images} onImageClick={handleImageClick} />
                     )}
-                    {fileAttachments.length > 0 && (
+                    {videos.length > 0 && (
+                      <div className="grid grid-cols-1 gap-2 max-w-sm">
+                        {videos.map((video, index) => (
+                          <VideoPreviewCard
+                            key={video.src}
+                            video={video}
+                            onOpen={() => setVideoLightboxIndex(index)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {nonVideoFileAttachments.length > 0 && (
                       <div className="space-y-2">
-                        {fileAttachments.map((file) => (
+                        {nonVideoFileAttachments.map((file) => (
                           <FileCard
                             key={file.id}
                             file={file}
@@ -763,6 +864,13 @@ export const ChatMessage = memo(function ChatMessage({
             images={images}
             initialIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
+          />
+        )}
+        {videoLightboxIndex !== null && videos.length > 0 && (
+          <VideoLightbox
+            videos={videos}
+            initialIndex={videoLightboxIndex}
+            onClose={() => setVideoLightboxIndex(null)}
           />
         )}
       </AnimatePresence>
