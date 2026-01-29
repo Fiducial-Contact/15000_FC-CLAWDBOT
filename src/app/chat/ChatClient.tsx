@@ -326,6 +326,14 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     if ('Notification' in window) {
       setPushPermission(Notification.permission);
     }
+    if (supported && Notification.permission === 'granted') {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (!reg) return;
+        reg.pushManager.getSubscription().then((sub) => {
+          if (sub) setPushEnabled(true);
+        });
+      });
+    }
   }, []);
 
   useEffect(() => {
