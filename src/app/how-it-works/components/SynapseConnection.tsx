@@ -15,6 +15,14 @@ interface SynapseConnectionProps {
     delay?: number;
 }
 
+function hashToUnit(value: string) {
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) {
+        hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+    }
+    return (hash % 1000) / 1000;
+}
+
 export function SynapseConnection({
     from,
     to,
@@ -29,9 +37,6 @@ export function SynapseConnection({
     const isHidden = status === 'hidden';
 
     // Calculate control points for a smooth curve
-    const midX = (from.x + to.x) / 2;
-    const midY = (from.y + to.y) / 2;
-    const dx = to.x - from.x;
     const dy = to.y - from.y;
 
     // Determine curve direction and curvature based on vertical distance
@@ -63,7 +68,7 @@ export function SynapseConnection({
         // negative begin time starts the animation immediately 'in progress'
         begin: `-${(i * (4 / particleCount)).toFixed(2)}s`, // 4s total duration
         // Drastically reduced size: 0.15 units is roughly 1.5px-2px on a 1080p screen (since viewBox is 0-100)
-        size: isHighlighted ? 0.25 + (Math.random() * 0.1) : 0.15,
+        size: isHighlighted ? 0.25 + (hashToUnit(`${pathId}-${i}`) * 0.1) : 0.15,
         opacity: isHighlighted ? 0.8 : 0.4
     }));
 

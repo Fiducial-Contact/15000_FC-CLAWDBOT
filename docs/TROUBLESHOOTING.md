@@ -8,11 +8,11 @@ export NVM_DIR="$HOME/.nvm"
 nvm use 22
 ```
 
-## 2) 端口被占用 (18889 / 3978)
+## 2) 端口被占用 (18789 / 3978)
 
 ```bash
 clawdbot --profile fiducial gateway stop
-lsof -i :18889
+lsof -i :18789
 lsof -i :3978
 ```
 

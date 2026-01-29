@@ -75,7 +75,7 @@
     }
   },
   "gateway": {
-    "port": 18889,
+    "port": 18789,
     "mode": "local",
     "bind": "loopback",
     "auth": {

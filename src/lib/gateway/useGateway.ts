@@ -535,18 +535,25 @@ export function useGateway({ userId }: UseGatewayOptions) {
       return;
     }
 
-    const client = new GatewayClient({
-      url: wsUrl,
-      token,
-      clientName: 'fc-team-chat',
-      clientVersion: '1.0.0',
-      mode: 'webchat',
-      userId,
-    });
+    const fallbackUrl =
+      process.env.NODE_ENV === 'development' && wsUrl !== 'ws://127.0.0.1:18789'
+        ? 'ws://127.0.0.1:18789'
+        : null;
 
-    clientRef.current = client;
+    const createGatewayClient = (url: string) =>
+      new GatewayClient({
+        url,
+        token,
+        clientName: 'fc-team-chat',
+        clientVersion: '1.0.0',
+        mode: 'webchat',
+        userId,
+      });
 
-    const unsubscribe = client.onChat((event: ChatEventPayload) => {
+    let activeClient = createGatewayClient(wsUrl);
+    clientRef.current = activeClient;
+
+    const handleChatEvent = (event: ChatEventPayload) => {
       if (event.sessionKey !== currentSessionKeyRef.current) return;
 
       if (event.state === 'delta' && event.message) {
@@ -614,9 +621,11 @@ export function useGateway({ userId }: UseGatewayOptions) {
         setIsLoading(false);
         currentRunIdRef.current = null;
       }
-    });
+    };
 
-    const unsubscribeTool = client.onTool((event: ToolEventPayload) => {
+    let unsubscribe = activeClient.onChat(handleChatEvent);
+
+    const handleToolEvent = (event: ToolEventPayload) => {
       if (event.sessionKey !== currentSessionKeyRef.current) return;
       if (!event.toolCallId) return;
 
@@ -654,24 +663,54 @@ export function useGateway({ userId }: UseGatewayOptions) {
         }, 3000);
         toolRemovalTimersRef.current.set(toolId, timeoutId);
       }
-    });
+    };
+
+    let unsubscribeTool = activeClient.onTool(handleToolEvent);
 
     const connect = async () => {
-      try {
+      const connectClient = async (client: GatewayClient) => {
         await client.connect();
         setIsConnected(true);
         setError(null);
 
         const sessionList = await client.listSessions();
         applyGatewaySessions(sessionList);
+      };
+
+      try {
+        await connectClient(activeClient);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Connection failed';
         if (errorMessage.startsWith('PAIRING_REQUIRED')) {
           const pairingCode = errorMessage.split(':')[1] || 'unknown';
           setError(`Authorization required. Your pairing code: ${pairingCode}. Please contact Haiwei to approve.`);
-        } else {
-          setError(errorMessage);
+          setIsConnected(false);
+          return;
         }
+
+        if (fallbackUrl) {
+          console.warn(`[Gateway] Primary connection failed (${wsUrl}); retrying local gateway.`);
+          unsubscribe();
+          unsubscribeTool();
+          activeClient.disconnect();
+
+          activeClient = createGatewayClient(fallbackUrl);
+          clientRef.current = activeClient;
+          unsubscribe = activeClient.onChat(handleChatEvent);
+          unsubscribeTool = activeClient.onTool(handleToolEvent);
+
+          try {
+            await connectClient(activeClient);
+          } catch (fallbackErr) {
+            const fallbackMessage =
+              fallbackErr instanceof Error ? fallbackErr.message : 'Connection failed';
+            setError(`Primary gateway failed (${errorMessage}). Local fallback failed (${fallbackMessage}).`);
+            setIsConnected(false);
+          }
+          return;
+        }
+
+        setError(errorMessage);
         setIsConnected(false);
       }
     };
@@ -682,7 +721,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
     return () => {
       unsubscribe();
       unsubscribeTool();
-      client.disconnect();
+      activeClient.disconnect();
       clientRef.current = null;
       if (streamFrameRef.current !== null) {
         cancelAnimationFrame(streamFrameRef.current);
@@ -862,34 +901,22 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
       if (imageInputs.length > 0 || fileInputs.length > 0) {
         const uploadResult = await uploadAttachmentsInParallel(imageInputs, fileInputs, userId);
-
-        if (uploadResult.imageError || uploadResult.fileError) {
-          const errorMsg = uploadResult.imageError?.message || uploadResult.fileError?.message || 'Upload failed';
-          setError(errorMsg);
-          const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) => {
-            if (item.kind === 'image' && uploadResult.imageError) return { ...item, status: 'error' as const };
-            if (item.kind === 'file' && uploadResult.fileError) return { ...item, status: 'error' as const };
-            return item;
-          });
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === messageId ? { ...message, attachments: updatedAttachments } : message
-            )
-          );
-          setIsLoading(false);
-          return;
-        }
-
         const imageUrlById = new Map(uploadResult.imageResults.map((r) => [r.id, r.url]));
         const fileUrlById = new Map(uploadResult.fileResults.map((r) => [r.id, r.url]));
         const updatedAttachments: ChatAttachment[] = displayAttachments.map((item) => {
           if (item.kind === 'image') {
             const url = imageUrlById.get(item.id);
-            return { ...item, url, status: url ? 'ready' as const : 'error' as const };
+            if (uploadResult.imageError) {
+              return { ...item, url, status: 'error' as const };
+            }
+            return url ? { ...item, url, status: 'ready' as const } : item;
           }
           if (item.kind === 'file') {
             const url = fileUrlById.get(item.id);
-            return { ...item, url, status: url ? 'ready' as const : 'error' as const };
+            if (uploadResult.fileError) {
+              return { ...item, url, status: 'error' as const };
+            }
+            return url ? { ...item, url, status: 'ready' as const } : item;
           }
           return item;
         });
@@ -899,6 +926,14 @@ export function useGateway({ userId }: UseGatewayOptions) {
             message.id === messageId ? { ...message, attachments: updatedAttachments } : message
           )
         );
+
+        if (uploadResult.imageError || uploadResult.fileError) {
+          const errorMsg =
+            uploadResult.imageError?.message || uploadResult.fileError?.message || 'Upload failed';
+          setError(errorMsg);
+          setIsLoading(false);
+          return;
+        }
 
         imageUrlText = buildImageUrlText(
           uploadResult.imageResults.map((r) => ({ name: r.name, url: r.url }))

@@ -61,6 +61,7 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading, prefillValue, 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (prefillValue) {
       setInputValue(prefillValue);
@@ -71,9 +72,12 @@ export function ChatInput({ onSend, onAbort, disabled, isLoading, prefillValue, 
         const len = prefillValue.length;
         inputRef.current?.setSelectionRange(len, len);
       }, 0);
-      setTimeout(() => setIsPrefillHighlight(false), 2000);
+      setTimeout(() => {
+        setIsPrefillHighlight(false);
+      }, 2000);
     }
   }, [prefillValue, onPrefillConsumed]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Auto-resize textarea
   useEffect(() => {

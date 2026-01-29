@@ -154,18 +154,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [showThinkingText, setShowThinkingText] = useState(true);
   const [inputPrefill, setInputPrefill] = useState('');
-  const [pushSupported] = useState(() =>
-    typeof window !== 'undefined' &&
-    'serviceWorker' in navigator &&
-    'PushManager' in window &&
-    'Notification' in window
-  );
-  const [pushPermission, setPushPermission] = useState<NotificationPermission>(() => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      return 'default';
-    }
-    return Notification.permission;
-  });
+  const [isClient, setIsClient] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
@@ -325,7 +316,17 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     return isNoiseText(streamingContent) ? '' : streamingContent;
   }, [streamingContent, showDetails, isNoiseText]);
 
-
+  useEffect(() => {
+    setIsClient(true);
+    const supported =
+      'serviceWorker' in navigator &&
+      'PushManager' in window &&
+      'Notification' in window;
+    setPushSupported(supported);
+    if ('Notification' in window) {
+      setPushPermission(Notification.permission);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isLoading || displayStreamingContent) return;
@@ -561,7 +562,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
             </div>
 
             <div className="flex items-center gap-2">
-              {pushSupported && (
+              {isClient && pushSupported && (
                 <button
                   onClick={pushEnabled ? disablePush : enablePush}
                   disabled={pushBusy || pushPermission === 'denied' || (!pushEnabled && !vapidPublicKey)}

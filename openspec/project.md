@@ -56,7 +56,7 @@ src/
 
 ### Clawdbot Integration
 - Gateway WebSocket: 46.224.225.164:18789
-- Agent: "work" (Team Sonnet - claude-sonnet-4-5)
+- Agent: "work" (claude-opus-4-5)
 - Persona: "Haiwei's Unpaid Intern" - capable but self-deprecating humor
 
 ### AI Capabilities (21 Skills)

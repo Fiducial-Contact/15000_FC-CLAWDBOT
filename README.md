@@ -211,24 +211,42 @@ pnpm dev
 
 Open http://localhost:3000
 
-### Required Environment Variables
+### Environment Variables
+
+**Required (core app):**
 
 | Variable | Description |
 |----------|-------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (for push API) |
 | `NEXT_PUBLIC_GATEWAY_WS_URL` | Gateway WebSocket URL (e.g., `ws://host:18789`) |
-| `NEXT_PUBLIC_GATEWAY_TOKEN` | Gateway auth token |
+| `NEXT_PUBLIC_GATEWAY_TOKEN` | Gateway auth token (required if gateway auth is enabled) |
 
-See `.env.example` for all available options including storage, push notifications, and file upload limits.
+**Optional (feature-specific):**
+
+| Variable | Description |
+|----------|-------------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Required for `/api/push/send` |
+| `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET` | Required for file uploads |
+| `NEXT_PUBLIC_SUPABASE_SIGNED_URL_TTL_SECONDS` | Signed URL TTL for uploads |
+| `NEXT_PUBLIC_CHAT_IMAGE_MAX_MB` | Image size limit (MB) |
+| `NEXT_PUBLIC_CHAT_FILE_MAX_MB` | File size limit (MB) |
+| `NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY` | Required for push notifications UI |
+| `WEB_PUSH_PRIVATE_KEY` | Required for push send API |
+| `WEB_PUSH_API_TOKEN` | Required for push send API + relay |
+| `WEB_PUSH_SUBJECT` | VAPID subject for push |
+| `GATEWAY_WS_URL` | Required by push relay script |
+| `GATEWAY_TOKEN` | Required by push relay script (if gateway auth enabled) |
+| `WEB_PUSH_SEND_URL` | Push relay target URL (e.g., `https://your-app.com/api/push/send`) |
+
+See `.env.example` for a complete template.
 
 ### Gateway Connection
 
 ```
 Protocol: WebSocket
 Default Port: 18789
-Agent: work (claude-sonnet-4-5)
+Agent: work (claude-opus-4-5)
 Methods: chat.send, chat.history, connect
 ```
 
@@ -250,6 +268,27 @@ create table if not exists web_push_subscriptions (
 
 create index if not exists idx_web_push_user on web_push_subscriptions(user_id);
 create index if not exists idx_web_push_peer on web_push_subscriptions(peer_id);
+```
+
+The skills page expects the following Supabase table:
+
+```sql
+create table if not exists skills_registry (
+  id uuid primary key default gen_random_uuid(),
+  skill_name text unique not null,
+  display_name text,
+  description text,
+  creator_id uuid references auth.users(id) on delete set null,
+  creator_email text,
+  source text not null default 'workspace',
+  status text not null default 'active',
+  icon text,
+  triggers text[],
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_skills_registry_name on skills_registry(skill_name);
 ```
 
 ---

@@ -8,8 +8,8 @@ nvm use 22
 
 echo "🦞 Starting Fiducial Clawdbot..."
 echo "   Profile: fiducial"
-echo "   Port: 18889"
+echo "   Port: 18789"
 echo ""
 
 # Start gateway
-clawdbot --profile fiducial gateway --port 18889
+clawdbot --profile fiducial gateway --port 18789

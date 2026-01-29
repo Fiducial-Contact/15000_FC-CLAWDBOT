@@ -19,7 +19,16 @@ interface GraphNodeProps {
     children?: React.ReactNode;
 }
 
+function hashToUnit(value: string) {
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) {
+        hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+    }
+    return (hash % 1000) / 1000;
+}
+
 export function GraphNode({
+    id,
     x,
     y,
     type,
@@ -33,11 +42,12 @@ export function GraphNode({
 }: GraphNodeProps) {
     const [isHovered, setIsHovered] = useState(false);
 
-    const { nodeSize, pulseDelay } = useMemo(() => ({
+    const { nodeSize, pulseDelay, haloDelay } = useMemo(() => ({
         // Use explicit size if provided, otherwise fallback to type-based defaults
         nodeSize: size || (type === 'gateway' ? 96 : type === 'core' ? 80 : 64),
-        pulseDelay: Math.random() * 2, // Keep pulse random so they don't breathe in sync pervertedly
-    }), [type, size]);
+        pulseDelay: hashToUnit(`${id}-pulse`) * 2,
+        haloDelay: hashToUnit(`${id}-halo`),
+    }), [id, type, size]);
 
     return (
         <motion.div
@@ -78,7 +88,7 @@ export function GraphNode({
                     duration: 3,
                     repeat: Infinity,
                     ease: "easeInOut",
-                    delay: delay + Math.random(),
+                    delay: delay + haloDelay,
                 }}
             />
 
