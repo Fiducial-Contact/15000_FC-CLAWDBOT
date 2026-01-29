@@ -1,0 +1,28 @@
+{
+  "entry_type": "idea",
+  "repo_root": "/Users/studio01/Documents/HH/HH_Project/15000_FC-CLAWDBOT-main",
+  "project_name": "fc-team-chat",
+  "scope": "full",
+  "artifact_store": "runs",
+  "need_database": true,
+  "need_billing": false,
+  "need_auth": true,
+  "need_deploy": true,
+  "need_seo": false,
+  "supabase": {
+    "project": "fiducial",
+    "url": "https://mcfsgxyemnqwlytplzmk.supabase.co"
+  },
+  "gateway": {
+    "host": "46.224.225.164",
+    "port": 18789,
+    "tailscale": "clawdbot.tail297e45.ts.net",
+    "agent": "work"
+  },
+  "brand": {
+    "skill": "fiducial-brand-guideline",
+    "primary": "#be1e2c",
+    "accent": "#e20613",
+    "background": "#f7f7fa"
+  }
+}

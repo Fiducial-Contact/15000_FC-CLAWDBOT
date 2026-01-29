@@ -112,15 +112,6 @@ const CAPABILITY_CATEGORIES = [
   },
 ];
 
-const QUICK_SUGGESTIONS = [
-  { icon: Palette, text: 'Draw a cat wearing sunglasses', color: '#be1e2c', requiresInput: false },
-  { icon: Video, text: 'How to write AE loop expression', color: '#e20613', requiresInput: false },
-  { icon: Film, text: 'Download this YouTube video: ', color: '#cd2e26', requiresInput: true },
-  { icon: Bell, text: 'Remind me in 10 min to join meeting', color: '#be1e2c', requiresInput: false },
-  { icon: FileText, text: 'Summarize this link: ', color: '#e20613', requiresInput: true },
-  { icon: Megaphone, text: 'Write product copy for: ', color: '#cd2e26', requiresInput: true },
-];
-
 const THINKING_PHRASES = [
   'Thinking...',
   'Checking references...',
@@ -434,9 +425,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   };
 
   const handleSurpriseMe = () => {
-    const sendable = QUICK_SUGGESTIONS.filter((s) => !s.requiresInput);
+    const sendable = CAPABILITY_CATEGORIES.filter((c) => !c.requiresInput);
     const randomIndex = Math.floor(Math.random() * sendable.length);
-    handleSuggestionClick(sendable[randomIndex].text, false);
+    handleSuggestionClick(sendable[randomIndex].defaultAction, false);
   };
 
   const buildSessionText = useCallback(() => {
@@ -683,39 +674,12 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                     </div>
                   </div>
 
-                  {/* Quick Suggestions */}
+                  {/* Surprise Me Button */}
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4, duration: 0.5 }}
                   >
-                    <p className="text-[15px] font-semibold tracking-tight text-[var(--fc-body-gray)] mb-4 text-center font-[family-name:var(--font-manrope)]">
-                      Quick start:
-                    </p>
-
-                    <div className="flex flex-wrap justify-center gap-2 max-w-2xl mx-auto mb-6">
-                      {QUICK_SUGGESTIONS.map((suggestion, i) => (
-                        <motion.button
-                          key={i}
-                          onClick={() => handleSuggestionClick(suggestion.text, suggestion.requiresInput)}
-                          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[var(--fc-border-gray)] rounded-full text-sm hover:border-[var(--fc-action-red)] hover:shadow-md transition-all group"
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.5 + i * 0.05 }}
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          <suggestion.icon
-                            size={14}
-                            style={{ color: suggestion.color }}
-                          />
-                          <span className="text-[var(--fc-body-gray)] group-hover:text-[var(--fc-black)] transition-colors">
-                            {suggestion.requiresInput ? suggestion.text.replace(/:\s*$/, '') : suggestion.text}
-                          </span>
-                        </motion.button>
-                      ))}
-                    </div>
-
                     <motion.button
                       onClick={handleSurpriseMe}
                       className="mx-auto flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white rounded-full text-sm font-medium shadow-lg hover:shadow-xl transition-shadow"

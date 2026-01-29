@@ -24,37 +24,38 @@ function isPushGone(err: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization') || '';
-  const apiToken = process.env.WEB_PUSH_API_TOKEN || '';
-  if (!apiToken || authHeader !== `Bearer ${apiToken}`) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  try {
+    const authHeader = request.headers.get('authorization') || '';
+    const apiToken = process.env.WEB_PUSH_API_TOKEN || '';
+    if (!apiToken || authHeader !== `Bearer ${apiToken}`) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-  const body = await request.json().catch(() => ({}));
-  const sessionKey = body?.sessionKey as string | undefined;
-  if (!sessionKey) {
-    return Response.json({ error: 'Session key is required' }, { status: 400 });
-  }
+    const body = await request.json().catch(() => ({}));
+    const sessionKey = body?.sessionKey as string | undefined;
+    if (!sessionKey) {
+      return Response.json({ error: 'Session key is required' }, { status: 400 });
+    }
 
-  const peerId = parsePeerId(sessionKey);
-  if (!peerId) {
-    return Response.json({ error: 'Invalid session key' }, { status: 400 });
-  }
+    const peerId = parsePeerId(sessionKey);
+    if (!peerId) {
+      return Response.json({ error: 'Invalid session key' }, { status: 400 });
+    }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  if (!supabaseUrl || !serviceKey) {
-    return Response.json({ error: 'Missing Supabase service configuration' }, { status: 500 });
-  }
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (!supabaseUrl || !serviceKey) {
+      return Response.json({ error: 'Missing Supabase service configuration' }, { status: 500 });
+    }
 
-  const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || '';
-  const privateKey = process.env.WEB_PUSH_PRIVATE_KEY || '';
-  const subject = process.env.WEB_PUSH_SUBJECT || 'mailto:admin@fiducial.com';
-  if (!publicKey || !privateKey) {
-    return Response.json({ error: 'Missing VAPID keys' }, { status: 500 });
-  }
+    const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || '';
+    const privateKey = process.env.WEB_PUSH_PRIVATE_KEY || '';
+    const subject = process.env.WEB_PUSH_SUBJECT || 'mailto:admin@fiducial.com';
+    if (!publicKey || !privateKey) {
+      return Response.json({ error: 'Missing VAPID keys' }, { status: 500 });
+    }
 
-  webpush.setVapidDetails(subject, publicKey, privateKey);
+    webpush.setVapidDetails(subject, publicKey, privateKey);
 
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
   const { data, error } = await supabase
@@ -102,5 +103,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return Response.json({ ok: true, delivered, failed });
+    return Response.json({ ok: true, delivered, failed });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return Response.json({ error: message }, { status: 500 });
+  }
 }
