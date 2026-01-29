@@ -54,31 +54,7 @@ interface ToolCardProps {
   status: ToolExecutionStatus;
   error?: string;
   isStreaming?: boolean;
-}
-
-export function ToolCardSkeleton() {
-  return (
-    <div className="rounded-xl border border-[var(--fc-border-gray)] bg-white overflow-hidden animate-pulse">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--fc-border-gray)]">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-[var(--fc-subtle-gray)]">
-            <div className="w-4 h-4 bg-zinc-200 rounded" />
-          </div>
-          <div className="h-4 w-24 bg-zinc-200 rounded" />
-        </div>
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-[var(--fc-action-red)]/10">
-          <Loader2 size={12} className="animate-spin text-[var(--fc-action-red)]" />
-          <span className="text-xs font-medium text-[var(--fc-action-red)]">Working...</span>
-        </div>
-      </div>
-      <div className="px-4 py-3">
-        <div className="space-y-2">
-          <div className="h-3 w-3/4 bg-zinc-100 rounded" />
-          <div className="h-3 w-1/2 bg-zinc-100 rounded" />
-        </div>
-      </div>
-    </div>
-  );
+  isPlaceholder?: boolean;
 }
 
 export const ToolCard = memo(function ToolCard({
@@ -88,14 +64,16 @@ export const ToolCard = memo(function ToolCard({
   status,
   error,
   isStreaming = false,
+  isPlaceholder = false,
 }: ToolCardProps) {
   const [showParams, setShowParams] = useState(false);
   const [showResult, setShowResult] = useState(false);
 
-  const displayName = formatToolName(toolName);
+  const displayName = isPlaceholder ? 'Working...' : formatToolName(toolName);
+  const isRunning = status === 'running';
 
-  const hasParams = parameters && Object.keys(parameters).length > 0;
-  const hasResult = result !== undefined || error;
+  const hasParams = !isPlaceholder && parameters && Object.keys(parameters).length > 0;
+  const hasResult = !isPlaceholder && (result !== undefined || error);
   const resultText = typeof result === 'string' ? result : result ? JSON.stringify(result, null, 2) : '';
   const previewText = useMemo(() => {
     if (!resultText) return '';
@@ -115,59 +93,85 @@ export const ToolCard = memo(function ToolCard({
   const statusConfig = {
     running: {
       badge: 'Running',
-      bgClass: 'bg-[var(--fc-action-red)]/10',
-      textClass: 'text-[var(--fc-action-red)]',
-      icon: <Loader2 size={12} className="animate-spin" />,
+      badgeClass: 'bg-[var(--fc-action-red)]/10 text-[var(--fc-action-red)]',
+      icon: <Loader2 size={11} className="animate-spin" />,
     },
     completed: {
       badge: 'Done',
-      bgClass: 'bg-green-100',
-      textClass: 'text-green-700',
-      icon: <Check size={12} />,
+      badgeClass: 'bg-emerald-50 text-emerald-600',
+      icon: <Check size={11} />,
     },
     failed: {
       badge: 'Failed',
-      bgClass: 'bg-red-100',
-      textClass: 'text-red-600',
-      icon: <X size={12} />,
+      badgeClass: 'bg-red-50 text-red-500',
+      icon: <X size={11} />,
     },
   };
 
   const currentStatus = statusConfig[status];
 
   return (
-    <div className="rounded-xl border border-[var(--fc-border-gray)] bg-white overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--fc-border-gray)]">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-[var(--fc-subtle-gray)]">
-            <ToolIcon toolName={toolName} size={16} className="text-[var(--fc-body-gray)]" />
+    <div
+      className={`rounded-lg border bg-white overflow-hidden transition-all duration-300 ${
+        isRunning
+          ? 'border-[var(--fc-action-red)]/30 shadow-[0_0_0_1px_rgba(190,30,44,0.1)]'
+          : 'border-[var(--fc-border-gray)]'
+      }`}
+    >
+      <div className="flex items-center justify-between px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          {!isPlaceholder && (
+            <div className="p-1 rounded-md bg-[var(--fc-subtle-gray)]">
+              <ToolIcon toolName={toolName} size={14} className="text-[var(--fc-body-gray)]" />
+            </div>
+          )}
+          {isPlaceholder ? (
+            <div className="flex items-center gap-2">
+              <motion.div
+                className="w-3 h-3 rounded-full bg-[var(--fc-action-red)]/20"
+                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              />
+              <span className="text-sm text-[var(--fc-light-gray)]">{displayName}</span>
+            </div>
+          ) : (
+            <span className="text-sm font-medium text-[var(--fc-black)]">{displayName}</span>
+          )}
+        </div>
+        {!isPlaceholder && (
+          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${currentStatus.badgeClass}`}>
+            {currentStatus.icon}
+            <span>{currentStatus.badge}</span>
           </div>
-          <span className="text-sm font-medium text-[var(--fc-black)]">
-            {displayName}
-          </span>
-        </div>
-        <div
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${currentStatus.bgClass} ${currentStatus.textClass}`}
-        >
-          {currentStatus.icon}
-          {currentStatus.badge}
-        </div>
+        )}
       </div>
 
+      {isPlaceholder && (
+        <div className="px-3 pb-3">
+          <div className="space-y-2">
+            {[0.6, 0.45].map((width, i) => (
+              <motion.div
+                key={i}
+                className="h-2 rounded bg-[var(--fc-subtle-gray)]"
+                animate={{ opacity: [0.4, 0.7, 0.4] }}
+                transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+                style={{ width: `${width * 100}%` }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {hasParams && (
-        <div className="border-b border-[var(--fc-border-gray)]">
+        <div className="border-t border-[var(--fc-border-gray)]">
           <button
             onClick={() => setShowParams(!showParams)}
-            className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-[var(--fc-subtle-gray)]/50 transition-colors"
+            className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[var(--fc-subtle-gray)]/50 transition-colors"
           >
-            <span className="text-xs font-medium text-[var(--fc-light-gray)]">
-              Parameters
-            </span>
+            <span className="text-[11px] font-medium text-[var(--fc-light-gray)]">Parameters</span>
             <ChevronDown
-              size={14}
-              className={`text-[var(--fc-light-gray)] transition-transform duration-200 ${
-                showParams ? 'rotate-180' : ''
-              }`}
+              size={12}
+              className={`text-[var(--fc-light-gray)] transition-transform duration-200 ${showParams ? 'rotate-180' : ''}`}
             />
           </button>
           <AnimatePresence initial={false}>
@@ -179,7 +183,7 @@ export const ToolCard = memo(function ToolCard({
                 transition={{ duration: 0.15 }}
                 className="overflow-hidden"
               >
-                <pre className="px-4 pb-3 text-xs text-[var(--fc-body-gray)] font-mono overflow-x-auto">
+                <pre className="px-3 pb-2.5 text-[11px] text-[var(--fc-body-gray)] font-mono overflow-x-auto">
                   {JSON.stringify(parameters, null, 2)}
                 </pre>
               </motion.div>
@@ -189,31 +193,27 @@ export const ToolCard = memo(function ToolCard({
       )}
 
       {hasResult && (
-        <div>
+        <div className="border-t border-[var(--fc-border-gray)]">
           <button
             onClick={() => setShowResult(!showResult)}
-            className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-[var(--fc-subtle-gray)]/50 transition-colors"
+            className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[var(--fc-subtle-gray)]/50 transition-colors"
           >
-            <span className="text-xs font-medium text-[var(--fc-light-gray)]">
-              {error ? 'Error' : 'Result'}
-            </span>
+            <span className="text-[11px] font-medium text-[var(--fc-light-gray)]">{error ? 'Error' : 'Result'}</span>
             <ChevronDown
-              size={14}
-              className={`text-[var(--fc-light-gray)] transition-transform duration-200 ${
-                showResult ? 'rotate-180' : ''
-              }`}
+              size={12}
+              className={`text-[var(--fc-light-gray)] transition-transform duration-200 ${showResult ? 'rotate-180' : ''}`}
             />
           </button>
           {!showResult && !error && previewText && (
-            <div className="px-4 pb-3">
-              <pre className="text-[11px] text-[var(--fc-body-gray)] font-mono bg-[var(--fc-subtle-gray)]/60 rounded-lg px-3 py-2 max-h-20 overflow-hidden">
+            <div className="px-3 pb-2.5">
+              <pre className="text-[10px] text-[var(--fc-body-gray)] font-mono bg-[var(--fc-subtle-gray)]/50 rounded-md px-2.5 py-1.5 max-h-16 overflow-hidden">
                 {previewText}
               </pre>
               {hasMoreResult && (
                 <button
                   type="button"
                   onClick={() => setShowResult(true)}
-                  className="mt-2 text-[11px] font-medium text-[var(--fc-action-red)] hover:underline"
+                  className="mt-1.5 text-[10px] font-medium text-[var(--fc-action-red)] hover:underline"
                 >
                   Show full result
                 </button>
@@ -230,12 +230,12 @@ export const ToolCard = memo(function ToolCard({
                 className="overflow-hidden"
               >
                 {error ? (
-                  <p className="px-4 pb-3 text-xs text-red-600">{error}</p>
+                  <p className="px-3 pb-2.5 text-[11px] text-red-600">{error}</p>
                 ) : (
-                  <pre className="px-4 pb-3 text-xs text-[var(--fc-body-gray)] font-mono overflow-x-auto max-h-56 overflow-y-auto">
+                  <pre className="px-3 pb-2.5 text-[11px] text-[var(--fc-body-gray)] font-mono overflow-x-auto max-h-48 overflow-y-auto">
                     {resultText}
                     {isStreaming && (
-                      <span className="inline-block w-1.5 h-4 bg-[var(--fc-action-red)] animate-pulse ml-0.5" />
+                      <span className="inline-block w-1 h-3 bg-[var(--fc-action-red)] animate-pulse ml-0.5" />
                     )}
                   </pre>
                 )}

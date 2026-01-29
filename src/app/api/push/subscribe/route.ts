@@ -47,18 +47,17 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { error } = await supabase.from('web_push_subscriptions').upsert(
-    {
-      user_id: user.id,
-      endpoint: subscription.endpoint,
-      p256dh: subscription.keys.p256dh,
-      auth: subscription.keys.auth,
-      peer_id: peerId,
-      user_agent: request.headers.get('user-agent'),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'endpoint' }
-  );
+  await supabase.from('web_push_subscriptions').delete().eq('user_id', user.id);
+
+  const { error } = await supabase.from('web_push_subscriptions').insert({
+    user_id: user.id,
+    endpoint: subscription.endpoint,
+    p256dh: subscription.keys.p256dh,
+    auth: subscription.keys.auth,
+    peer_id: peerId,
+    user_agent: request.headers.get('user-agent'),
+    updated_at: new Date().toISOString(),
+  });
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });

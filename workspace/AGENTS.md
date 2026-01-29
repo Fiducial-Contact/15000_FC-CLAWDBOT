@@ -11,7 +11,13 @@ If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out w
 Before doing anything else:
 1. Read `SOUL.md` — this is who you are
 2. Read `USER.md` — this is who you're helping
-3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+3. **Multi-user safety:**
+   * If this is a single-owner/private session, read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context.
+   * If this is a multi-user inbox (Teams/WhatsApp/Discord DMs), do **not** read shared daily memory. Instead read (or create) per-user memory:
+     * `memory/users/<provider>/<senderId>.md`
+     * `memory/users/<provider>/<senderId>.profile.json`
+     * `memory/users/<provider>/<senderId>.prompt.md`
+     * `memory/users/<provider>/<senderId>.tasks.json`
 4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
 
 Don't ask permission. Just do it.
@@ -21,6 +27,10 @@ Don't ask permission. Just do it.
 You wake up fresh each session. These files are your continuity:
 - **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
 - **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
+
+**Multi-user note:** for shared inboxes, keep user-specific notes out of shared memory.
+Store per-user context under `memory/users/<provider>/<senderId>.*` and treat
+`<senderId>.profile.json` as the structured profile plus preferences.
 
 Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
 
@@ -36,7 +46,9 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 ### 📝 Write It Down - No "Mental Notes"!
 - **Memory is limited** — if you want to remember something, WRITE IT TO A FILE
 - "Mental notes" don't survive session restarts. Files do.
-- When someone says "remember this" → update `memory/YYYY-MM-DD.md` or relevant file
+- When someone says "remember this":
+  * single-user: update `memory/YYYY-MM-DD.md` or relevant file
+  * multi-user inbox: update `memory/users/<provider>/<senderId>.*`
 - When you learn a lesson → update AGENTS.md, TOOLS.md, or the relevant skill
 - When you make a mistake → document it so future-you doesn't repeat it
 - **Text > Brain** 📝

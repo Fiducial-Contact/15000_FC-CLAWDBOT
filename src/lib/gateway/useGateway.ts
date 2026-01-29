@@ -333,6 +333,18 @@ export function useGateway({ userId }: UseGatewayOptions) {
     }
   }, [userId]);
 
+  const setSessionVerbose = useCallback(async (sessionKey: string, enabled: boolean) => {
+    if (!clientRef.current || !clientRef.current.isConnected()) {
+      return;
+    }
+    try {
+      await clientRef.current.patchSession(sessionKey, { verboseLevel: enabled ? 'on' : 'off' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update details mode';
+      setError(message);
+    }
+  }, []);
+
   useEffect(() => {
     if (userId && !currentSessionKey) {
       const key = buildSessionKey(buildPeerId(userId));
@@ -683,7 +695,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
         const errorMessage = err instanceof Error ? err.message : 'Connection failed';
         if (errorMessage.startsWith('PAIRING_REQUIRED')) {
           const pairingCode = errorMessage.split(':')[1] || 'unknown';
-          setError(`Authorization required. Your pairing code: ${pairingCode}. Please contact Haiwei to approve.`);
+          setError(`Authorization required. Your pairing code: ${pairingCode}. Please contact admin to approve.`);
           setIsConnected(false);
           return;
         }
@@ -1168,5 +1180,6 @@ export function useGateway({ userId }: UseGatewayOptions) {
     deleteSession,
     toggleSidebar,
     abortChat,
+    setSessionVerbose,
   };
 }

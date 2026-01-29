@@ -18,7 +18,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded || isStreaming);
 
   return (
-    <div className="rounded-xl border border-[var(--fc-border-gray)] bg-[var(--fc-subtle-gray)] overflow-hidden">
+    <div className="rounded-xl border border-[var(--fc-border-gray)] bg-white overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-black/[.02] transition-colors"
@@ -34,9 +34,8 @@ export const ThinkingBlock = memo(function ThinkingBlock({
         </div>
         <ChevronDown
           size={16}
-          className={`text-[var(--fc-light-gray)] transition-transform duration-200 ${
-            isExpanded ? 'rotate-180' : ''
-          }`}
+          className={`text-[var(--fc-light-gray)] transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''
+            }`}
         />
       </button>
 

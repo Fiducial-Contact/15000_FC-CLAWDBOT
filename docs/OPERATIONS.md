@@ -22,7 +22,7 @@ tags: [clawdbot, vps, ssh, operations, team]
 | IP | `46.224.225.164` |
 | SSH | `ssh -p 2222 haiwei@46.224.225.164` |
 | Tailscale | `clawdbot.tail297e45.ts.net` |
-| Gateway Port | 18789 (loopback) |
+| Gateway Port | 18789 (loopback, WS + Control UI) |
 | Teams Webhook | 3978 (via Tailscale Funnel) |
 
 ## 连接远程主机
@@ -36,28 +36,28 @@ ssh -p 2222 haiwei@46.224.225.164
 
 ```bash
 # Gateway 状态
-ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot status"
+ssh -p 2222 haiwei@46.224.225.164 "clawdbot status"
 
 # 实时日志
-ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot logs -f"
+ssh -p 2222 haiwei@46.224.225.164 "clawdbot logs --follow"
 
 # 重启 Gateway
-ssh -p 2222 haiwei@46.224.225.164 "sudo XDG_RUNTIME_DIR=/run/user/0 systemctl --user restart clawdbot-gateway"
+ssh -p 2222 haiwei@46.224.225.164 "clawdbot gateway restart"
 ```
 
 ## Pairing 管理（新成员接入）
 
 ```bash
 # 列出待批准的配对请求
-ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing list msteams"
+ssh -p 2222 haiwei@46.224.225.164 "clawdbot pairing list msteams"
 
 # 批准配对
-ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing approve msteams <code>"
+ssh -p 2222 haiwei@46.224.225.164 "clawdbot pairing approve msteams <code> --notify"
 ```
 
 ## 技术文档查询
 
-需要 Clawdbot 技术文档时，使用 `/tool-clawdbot` skill：
+需要 Clawdbot 技术文档时，使用 `/skill tool-clawdbot`（或启用技能命令后用 `/tool_clawdbot`）：
 
 - Gateway 配置和架构
 - Channel 设置 (Teams, WhatsApp, Web)
