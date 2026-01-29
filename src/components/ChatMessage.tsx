@@ -676,7 +676,7 @@ export const ChatMessage = memo(function ChatMessage({
                 className={`px-4 py-3 text-[14px] leading-relaxed max-w-full overflow-hidden break-words ${isUser
                     ? 'bg-[var(--fc-charcoal)] text-white rounded-2xl rounded-tr-sm'
                     : 'bg-white text-[var(--fc-black)] rounded-2xl rounded-tl-sm shadow-sm border border-[var(--fc-border-gray)]'
-                  }`}
+                  } ${isStreaming ? 'min-w-[180px]' : ''}`}
               >
                 {(images.length > 0 || fileAttachments.length > 0) && (
                   <div className="space-y-3 mb-3">
@@ -704,7 +704,7 @@ export const ChatMessage = memo(function ChatMessage({
                   isUser ? (
                     <span className="whitespace-pre-wrap break-words text-white" style={{ color: '#ffffff !important' }}>{displayContent}</span>
                   ) : (
-                    <div className="markdown-content">
+                    <div className={`markdown-content ${isStreaming ? 'streaming' : ''}`}>
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}

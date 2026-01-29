@@ -272,6 +272,16 @@ p {
   margin-bottom: 0;
 }
 
+.markdown-content.streaming {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.markdown-content.streaming > * {
+  display: inline;
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
