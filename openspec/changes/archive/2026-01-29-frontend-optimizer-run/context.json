@@ -1,0 +1,28 @@
+{
+  "run_id": "frontend-optimizer-run",
+  "workflow": "frontend-optimizer",
+  "repo_root": "/Users/studio01/Documents/HH/HH_Project/15000_FC-CLAWDBOT-main",
+  "target_path": null,
+  "framework": "react",
+  "timestamp": "2026-01-28T14:41:00Z",
+  "scope_mode": "full_scan",
+  "target_files": [
+    "src/app/layout.tsx",
+    "src/app/page.tsx",
+    "src/app/globals.css",
+    "src/app/chat/page.tsx",
+    "src/app/chat/ChatClient.tsx",
+    "src/components/Header.tsx",
+    "src/components/LoginForm.tsx",
+    "src/components/CapabilityCard.tsx",
+    "src/components/ChatInput.tsx",
+    "src/components/ChatMessage.tsx",
+    "src/components/ChatSidebar.tsx",
+    "src/lib/gateway/useGateway.ts",
+    "src/lib/gateway/client.ts",
+    "src/lib/gateway/types.ts",
+    "src/lib/supabase/client.ts"
+  ],
+  "detected_framework": "nextjs-16-react-19-tailwind-v4",
+  "design_system_exists": true
+}

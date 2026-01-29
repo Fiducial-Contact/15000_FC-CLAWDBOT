@@ -1,0 +1,9 @@
+{
+  "name": "ae-premiere-helper",
+  "version": "0.1.0",
+  "description": "After Effects and Premiere Pro technical support for Fiducial Communications",
+  "main": "SKILL.md",
+  "keywords": ["clawdbot", "after-effects", "premiere", "video", "post-production"],
+  "author": "Fiducial Communications",
+  "license": "UNLICENSED"
+}

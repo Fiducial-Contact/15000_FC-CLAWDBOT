@@ -1,0 +1,9 @@
+.git
+*.md
+docs/
+teams-app/
+config/
+*.sh
+!docker-entrypoint.sh
+.DS_Store
+workspace/.git

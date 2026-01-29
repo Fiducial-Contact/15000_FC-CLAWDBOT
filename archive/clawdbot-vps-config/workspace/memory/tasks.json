@@ -1,0 +1,14 @@
+{
+  "tasks": [],
+  "lastHealthCheck": null,
+  "schema": {
+    "task": {
+      "id": "string",
+      "createdBy": "string (username)",
+      "createdAt": "ISO timestamp",
+      "dueAt": "ISO timestamp or null",
+      "description": "string",
+      "status": "pending | done | cancelled"
+    }
+  }
+}

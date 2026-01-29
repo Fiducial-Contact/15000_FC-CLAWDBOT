@@ -1,0 +1,9 @@
+{
+  "name": "fc-reminders",
+  "version": "0.1.0",
+  "description": "Per-user reminders and tasks for Fiducial Communications (multi-user inbox safe)",
+  "main": "SKILL.md",
+  "keywords": ["clawdbot", "reminders", "tasks", "cron", "msteams"],
+  "author": "Fiducial Communications",
+  "license": "UNLICENSED"
+}

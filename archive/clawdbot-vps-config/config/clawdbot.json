@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.1.23-1",
+    "lastTouchedAt": "2026-01-25T12:22:47.318Z"
+  },
+  "auth": {
+    "profiles": {
+      "anthropic:default": {
+        "provider": "anthropic",
+        "mode": "token"
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "models": {
+        "anthropic/claude-opus-4-5": {
+          "alias": "opus"
+        }
+      },
+      "workspace": "/Users/huanghaiwei/Documents/Web/clawdbot/workspace",
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      },
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "none"
+      }
+    }
+  },
+  "tools": {
+    "web": {
+      "search": {
+        "enabled": true
+      },
+      "fetch": {
+        "enabled": true
+      }
+    }
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto"
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "channels": {
+    "telegram": {
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "streamMode": "partial"
+    },
+    "msteams": {
+      "enabled": true,
+      "configWrites": false,
+      "appId": "75dd7001-a533-4370-a7c1-a103effaeb7e",
+      "appPassword": "${MSTEAMS_APP_PASSWORD}",
+      "tenantId": "7cbf9cf0-b1b1-4fec-9a9b-9a303f329c82",
+      "webhook": {
+        "port": 3978,
+        "path": "/api/messages"
+      },
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "configWrites": false
+    }
+  },
+  "gateway": {
+    "port": 18889,
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "${GATEWAY_TOKEN}"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  },
+  "skills": {
+    "install": {
+      "nodeManager": "npm"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": {
+        "enabled": true
+      },
+      "msteams": {
+        "enabled": true
+      }
+    }
+  }
+}
