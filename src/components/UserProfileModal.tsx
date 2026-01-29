@@ -40,6 +40,8 @@ export const UserProfileModal = memo(function UserProfileModal({
         profile ? profile : createDefaultProfile()
     );
 
+    const isBasicInfoComplete = Boolean(draft.name.trim() && draft.role.trim());
+
     const handleSave = () => {
         onSave(draft);
     };
@@ -158,6 +160,22 @@ export const UserProfileModal = memo(function UserProfileModal({
                                             </div>
 
                                             <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-[var(--fc-body-gray)] uppercase tracking-wider">
+                                                    Work Context
+                                                </label>
+                                                <textarea
+                                                    value={draft.preferences.workContext}
+                                                    onChange={(e) => updatePreference('workContext', e.target.value)}
+                                                    rows={3}
+                                                    placeholder="2–3 sentences: what you do + what you want help with (e.g. 'Motion design, mostly AE. I often need expressions, export settings, and quick troubleshooting.')"
+                                                    className="w-full px-3 py-2 bg-[var(--fc-subtle-gray)]/50 border border-transparent rounded-lg text-sm text-[var(--fc-dark-gray)] focus:outline-none focus:bg-white focus:border-[var(--fc-action-red)] focus:ring-1 focus:ring-[var(--fc-action-red)] transition-all font-medium resize-none leading-relaxed"
+                                                />
+                                                <p className="text-[11px] text-[var(--fc-light-gray)] leading-relaxed">
+                                                    This helps the AI tailor answers without guessing. Keep it professional—avoid personal or sensitive info.
+                                                </p>
+                                            </div>
+
+                                            <div className="space-y-1.5">
                                                 <label className="text-xs font-medium text-[var(--fc-body-gray)] uppercase tracking-wider">Software</label>
                                                 <TagInput
                                                     tags={draft.software}
@@ -213,6 +231,12 @@ export const UserProfileModal = memo(function UserProfileModal({
                                     {error}
                                 </div>
                             )}
+                            {!isBasicInfoComplete && (
+                                <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                                    Please fill in <span className="font-semibold">Name</span> and{' '}
+                                    <span className="font-semibold">Role</span> so the AI can personalize responses.
+                                </div>
+                            )}
                             <div className="flex items-center justify-between">
                                 <span className="text-xs text-[var(--fc-light-gray)] font-medium">
                                     Last updated: {formatDate(draft.lastUpdated)}
@@ -226,7 +250,7 @@ export const UserProfileModal = memo(function UserProfileModal({
                                     </button>
                                     <button
                                         onClick={handleSave}
-                                        disabled={isSaving || isLoading}
+                                        disabled={!isBasicInfoComplete || isSaving || isLoading}
                                         className="px-6 py-2 text-sm font-medium text-white bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] rounded-lg shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
                                     >
                                         {isSaving ? (

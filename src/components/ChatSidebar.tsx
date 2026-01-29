@@ -9,10 +9,18 @@ import {
   PanelLeftClose,
   PanelLeft,
   Pin,
-  Clock,
   History,
 } from 'lucide-react';
-import type { SessionEntry } from '@/lib/gateway/types';
+
+import type { SessionEntry, ToolEventPayload } from '@/lib/gateway/types';
+
+export interface AgentStatusProps {
+  isConnected: boolean;
+  isLoading: boolean;
+  activeTools: Map<string, ToolEventPayload>;
+  currentSession: SessionEntry | undefined;
+  lastThinking: string | null;
+}
 
 interface ChatSidebarProps {
   sessions: SessionEntry[];
@@ -23,6 +31,7 @@ interface ChatSidebarProps {
   onSelectSession: (sessionKey: string) => void;
   onDeleteSession: (sessionKey: string) => void;
   onToggle: () => void;
+  agentStatus?: AgentStatusProps;
 }
 
 interface TooltipProps {
@@ -256,6 +265,7 @@ const IconRail = memo(function IconRail({
   onNewSession,
   onSelectSession,
   onToggle,
+  agentStatus,
 }: {
   sessions: SessionEntry[];
   currentSessionKey: string;
@@ -263,6 +273,7 @@ const IconRail = memo(function IconRail({
   onNewSession: () => void;
   onSelectSession: (sessionKey: string) => void;
   onToggle: () => void;
+  agentStatus?: AgentStatusProps;
 }) {
   const recentSessions = useMemo(() => {
     return sessions
@@ -351,6 +362,23 @@ const IconRail = memo(function IconRail({
           </Tooltip>
         ))}
       </div>
+
+      {/* Agent Status Dot */}
+      {agentStatus && (
+        <Tooltip content={agentStatus.isConnected ? 'Agent connected' : 'Agent disconnected'} position="right">
+          <div className="flex justify-center py-3 border-t border-[var(--fc-border-gray)]">
+            <span className="relative flex h-3 w-3">
+              {agentStatus.isLoading && agentStatus.isConnected && (
+                <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+              )}
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${!agentStatus.isConnected ? 'bg-[var(--fc-action-red)]' :
+                  agentStatus.isLoading ? 'bg-emerald-500 animate-pulse' :
+                    'bg-emerald-500'
+                }`} />
+            </span>
+          </div>
+        </Tooltip>
+      )}
     </motion.div>
   );
 });
@@ -364,6 +392,7 @@ export const ChatSidebar = memo(function ChatSidebar({
   onSelectSession,
   onDeleteSession,
   onToggle,
+  agentStatus,
 }: ChatSidebarProps) {
   const [isIconRail, setIsIconRail] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<SessionEntry | null>(null);
@@ -515,6 +544,7 @@ export const ChatSidebar = memo(function ChatSidebar({
         onNewSession={onNewSession}
         onSelectSession={onSelectSession}
         onToggle={onToggle}
+        agentStatus={agentStatus}
       />
     );
   }
@@ -589,6 +619,8 @@ export const ChatSidebar = memo(function ChatSidebar({
                 </>
               )}
             </div>
+
+
 
             {/* Footer - Enhanced with keyboard shortcut hint */}
             <div className="px-4 py-3 border-t border-[var(--fc-border-gray)] bg-[var(--fc-subtle-gray)]/50">

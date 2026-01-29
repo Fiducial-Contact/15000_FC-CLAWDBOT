@@ -26,6 +26,8 @@ import { Header } from '@/components/Header';
 import { ChatMessage } from '@/components/ChatMessage';
 import { ChatInput } from '@/components/ChatInput';
 import { ChatSidebar } from '@/components/ChatSidebar';
+import { AgentInsightPanel } from '@/components/AgentInsightPanel';
+
 import { CapabilityCard } from '@/components/CapabilityCard';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { UserProfileModal } from '@/components/UserProfileModal';
@@ -124,6 +126,28 @@ const THINKING_PHRASES = [
   'Almost there...',
 ];
 
+const PROFILE_SYNC_PREFIX = '[fc:profile-sync:v1]';
+
+type ProfileSyncSource = 'initial' | 'update' | 'context_break';
+type ProfileSyncStatus = 'sent' | 'skipped' | 'failed';
+
+type ProfileSyncInfo = {
+  at: string;
+  source: ProfileSyncSource;
+  status: ProfileSyncStatus;
+  sessionKey?: string;
+  fingerprint?: string;
+  reason?: string;
+};
+
+type ToolTraceItem = {
+  id: string;
+  toolName: string;
+  status?: string;
+  when?: string;
+  summary?: string;
+};
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -133,6 +157,88 @@ function urlBase64ToUint8Array(base64String: string) {
     outputArray[i] = rawData.charCodeAt(i);
   }
   return outputArray;
+}
+
+function hashString(input: string) {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) + hash + input.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(16);
+}
+
+function redactPotentialSecrets(text: string) {
+  // Basic best-effort redaction for UI display; avoids leaking obvious tokens.
+  return text
+    .replace(/\bsk-[A-Za-z0-9_-]{10,}\b/g, 'sk-***')
+    .replace(/\bntn_[A-Za-z0-9]{10,}\b/g, 'ntn_***')
+    .replace(/\b(eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,})\b/g, 'jwt_***');
+}
+
+function summarizeToolParameters(params: unknown): string | undefined {
+  if (!params || typeof params !== 'object') return undefined;
+  const record = params as Record<string, unknown>;
+
+  const filePath = record.filePath ?? record.path;
+  if (typeof filePath === 'string' && filePath.trim()) {
+    return `file: ${filePath}`;
+  }
+
+  const url = record.url;
+  if (typeof url === 'string' && url.trim()) {
+    return `url: ${url}`;
+  }
+
+  const query = record.query;
+  if (typeof query === 'string' && query.trim()) {
+    return `query: ${query}`;
+  }
+
+  const command = record.command;
+  if (typeof command === 'string' && command.trim()) {
+    return `cmd: ${redactPotentialSecrets(command).slice(0, 120)}`;
+  }
+
+  const keys = Object.keys(record).slice(0, 4);
+  if (keys.length > 0) {
+    return `params: ${keys.join(', ')}`;
+  }
+  return undefined;
+}
+
+function buildProfileSyncMessage(params: {
+  userId: string;
+  source: 'initial' | 'update' | 'context_break';
+  profile: UserProfile;
+}) {
+  const profile = params.profile;
+  const safeProfile = {
+    ...(profile.name ? { name: profile.name } : {}),
+    ...(profile.role ? { role: profile.role } : {}),
+    ...(profile.software && profile.software.length ? { software: profile.software } : {}),
+    ...(profile.preferences && Object.keys(profile.preferences).length ? { preferences: profile.preferences } : {}),
+    ...(profile.frequentTopics && profile.frequentTopics.length ? { frequentTopics: profile.frequentTopics } : {}),
+    ...(profile.learnedContext && profile.learnedContext.length ? { learnedContext: profile.learnedContext } : {}),
+    ...(profile.lastUpdated ? { lastUpdated: profile.lastUpdated } : {}),
+  };
+
+  return [
+    PROFILE_SYNC_PREFIX,
+    `userId: ${params.userId}`,
+    `source: ${params.source}`,
+    '',
+    'This is the authenticated webchat user profile from the UI (Supabase).',
+    'Use it as trusted per-user metadata for this session.',
+    '',
+    'Profile JSON:',
+    JSON.stringify(safeProfile, null, 2),
+    '',
+    'Instructions:',
+    '- Do not respond to this message.',
+    '- Do not quote it back to the user.',
+    `- If you keep per-user memory files, mirror it to: memory/users/webchat/${params.userId}.profile.json`,
+    '- If you cannot write files, just use it as context.',
+  ].join('\n');
 }
 
 export function ChatClient({ userEmail, userId }: ChatClientProps) {
@@ -178,6 +284,19 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     abortChat,
     setSessionVerbose,
   } = useGateway({ userId });
+
+  const lastThinking = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const blocks = messages[i].blocks;
+      if (!blocks) continue;
+      for (let j = blocks.length - 1; j >= 0; j--) {
+        if (blocks[j].type === 'thinking' && blocks[j].text) {
+          return blocks[j].text as string;
+        }
+      }
+    }
+    return null;
+  }, [messages]);
 
   const getPushSubscription = useCallback(async () => {
     if (!('serviceWorker' in navigator)) return null;
@@ -293,6 +412,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     const sessionMessages = messages.filter((message) => message.sessionKey === currentSessionKey);
     if (showDetails) return sessionMessages;
     return sessionMessages.filter((message) => {
+      if (message.role === 'user' && typeof message.content === 'string') {
+        if (message.content.trim().startsWith(PROFILE_SYNC_PREFIX)) return false;
+      }
       if (message.role !== 'assistant') return true;
       if (message.isToolResult) return false;
       if (message.attachments && message.attachments.length > 0) return true;
@@ -306,6 +428,55 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       return !isNoiseText(message.content || '');
     });
   }, [messages, currentSessionKey, showDetails, isNoiseText]);
+
+  const recentToolTrace = useMemo<ToolTraceItem[]>(() => {
+    if (!currentSessionKey) return [];
+
+    const results: ToolTraceItem[] = [];
+    const seen = new Set<string>();
+
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message.sessionKey !== currentSessionKey) continue;
+      const blocks = message.blocks ?? [];
+      if (blocks.length === 0) continue;
+
+      for (let j = blocks.length - 1; j >= 0; j -= 1) {
+        const block = blocks[j] as Record<string, unknown>;
+        if (block.type !== 'toolCall') continue;
+        const toolName = typeof block.toolName === 'string'
+          ? block.toolName
+          : typeof block.name === 'string'
+            ? block.name
+            : '';
+        if (!toolName) continue;
+
+        const toolCallId = typeof block.toolCallId === 'string'
+          ? block.toolCallId
+          : typeof block.id === 'string'
+            ? block.id
+            : `${message.id}:${j}:${toolName}`;
+
+        if (seen.has(toolCallId)) continue;
+        seen.add(toolCallId);
+
+        const status = typeof block.status === 'string' ? block.status : undefined;
+        const summary = summarizeToolParameters(block.parameters);
+
+        results.push({
+          id: toolCallId,
+          toolName,
+          status,
+          when: message.timestamp || undefined,
+          summary,
+        });
+
+        if (results.length >= 8) return results;
+      }
+    }
+
+    return results;
+  }, [messages, currentSessionKey]);
 
   const displayStreamingContent = useMemo(() => {
     if (showDetails) return streamingContent;
@@ -381,10 +552,14 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileModalSource, setProfileModalSource] = useState<'manual' | 'onboarding'>('manual');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSyncInfo, setProfileSyncInfo] = useState<ProfileSyncInfo | null>(null);
+  const lastProfileSyncKeyRef = useRef<string | null>(null);
+  const lastContextBreakSyncAtRef = useRef<number>(0);
 
 
   useEffect(() => {
@@ -467,14 +642,105 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
         throw new Error(data.error || 'Failed to load profile');
       }
       const data = await res.json();
-      setProfile(data.profile ?? createDefaultProfile());
+      const emailPrefix = userEmail.split('@')[0] || '';
+      const fallback = createDefaultProfile({ name: emailPrefix });
+      setProfile(data.profile ?? fallback);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load profile';
       setProfileError(message);
     } finally {
       setProfileLoading(false);
     }
-  }, []);
+  }, [userEmail]);
+
+  const syncProfileToAgent = useCallback(async (source: ProfileSyncSource, profileOverride?: UserProfile) => {
+    const nowIso = new Date().toISOString();
+    const profileToSync = profileOverride ?? profile;
+    if (!profileToSync) {
+      setProfileSyncInfo({ at: nowIso, source, status: 'skipped', reason: 'No profile loaded' });
+      return;
+    }
+    if (!isConnected) {
+      setProfileSyncInfo({ at: nowIso, source, status: 'skipped', reason: 'Gateway disconnected' });
+      return;
+    }
+    if (!currentSessionKey) {
+      setProfileSyncInfo({ at: nowIso, source, status: 'skipped', reason: 'No active session' });
+      return;
+    }
+    if (typeof window === 'undefined') {
+      setProfileSyncInfo({ at: nowIso, source, status: 'skipped', sessionKey: currentSessionKey, reason: 'Not in browser context' });
+      return;
+    }
+
+    const syncPayload = {
+      userId,
+      source,
+      profile: {
+        name: profileToSync.name,
+        role: profileToSync.role,
+        software: profileToSync.software,
+        preferences: profileToSync.preferences,
+        frequentTopics: profileToSync.frequentTopics,
+        learnedContext: profileToSync.learnedContext,
+        lastUpdated: profileToSync.lastUpdated,
+      },
+    };
+
+    const fingerprint = hashString(JSON.stringify(syncPayload));
+    const syncKey = `${currentSessionKey}:${fingerprint}`;
+    if (lastProfileSyncKeyRef.current === syncKey) {
+      setProfileSyncInfo({
+        at: nowIso,
+        source,
+        status: 'skipped',
+        sessionKey: currentSessionKey,
+        fingerprint,
+        reason: 'Already synced (same fingerprint in memory)',
+      });
+      return;
+    }
+
+    const storageKey = `fc-profile-sync:${currentSessionKey}`;
+    const storedFingerprint = localStorage.getItem(storageKey);
+    if (storedFingerprint === fingerprint) {
+      lastProfileSyncKeyRef.current = syncKey;
+      setProfileSyncInfo({
+        at: nowIso,
+        source,
+        status: 'skipped',
+        sessionKey: currentSessionKey,
+        fingerprint,
+        reason: 'Already synced (same fingerprint in localStorage)',
+      });
+      return;
+    }
+
+    try {
+      await sendMessage({ text: buildProfileSyncMessage({ userId, source, profile: profileToSync }) });
+      setProfileSyncInfo({
+        at: new Date().toISOString(),
+        source,
+        status: 'sent',
+        sessionKey: currentSessionKey,
+        fingerprint,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to sync profile';
+      setProfileSyncInfo({
+        at: new Date().toISOString(),
+        source,
+        status: 'failed',
+        sessionKey: currentSessionKey,
+        fingerprint,
+        reason: message,
+      });
+      throw err;
+    }
+
+    localStorage.setItem(storageKey, fingerprint);
+    lastProfileSyncKeyRef.current = syncKey;
+  }, [profile, isConnected, currentSessionKey, userId, sendMessage]);
 
   const saveProfile = useCallback(async (updatedProfile: UserProfile) => {
     setProfileSaving(true);
@@ -492,19 +758,83 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       const data = await res.json();
       setProfile(data.profile);
       setIsProfileModalOpen(false);
+      setProfileModalSource('manual');
+      try {
+        localStorage.removeItem(`fc-profile-onboarding-snooze-until:${userId}`);
+      } catch {
+        // ignore storage errors
+      }
+      await syncProfileToAgent('update', data.profile);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save profile';
       setProfileError(message);
     } finally {
       setProfileSaving(false);
     }
-  }, []);
+  }, [syncProfileToAgent, userId]);
 
   const handleOpenProfile = useCallback(() => {
     setProfileError(null);
+    setProfileModalSource('manual');
     setIsProfileModalOpen(true);
     fetchProfile();
   }, [fetchProfile]);
+
+  const handleCloseProfile = useCallback(() => {
+    setIsProfileModalOpen(false);
+    if (profileModalSource !== 'onboarding') return;
+    const missingBasics = !profile?.name?.trim() || !profile?.role?.trim();
+    if (!missingBasics) return;
+    try {
+      const snoozeUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      localStorage.setItem(`fc-profile-onboarding-snooze-until:${userId}`, snoozeUntil);
+    } catch {
+      // ignore storage errors
+    }
+  }, [profileModalSource, profile, userId]);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  useEffect(() => {
+    if (profileLoading) return;
+    if (isProfileModalOpen) return;
+    if (!profile) return;
+    const missingBasics = !profile.name.trim() || !profile.role.trim();
+    if (!missingBasics) return;
+    try {
+      const snoozeUntil = localStorage.getItem(`fc-profile-onboarding-snooze-until:${userId}`);
+      if (snoozeUntil) {
+        const snoozeMs = Date.parse(snoozeUntil);
+        if (!Number.isNaN(snoozeMs) && snoozeMs > Date.now()) return;
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    setProfileModalSource('onboarding');
+    setIsProfileModalOpen(true);
+  }, [profile, profileLoading, isProfileModalOpen, userId]);
+
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant') return;
+    const content = (last.content || '').toLowerCase();
+    const isContextBreak =
+      content.includes('context overflow') ||
+      content.includes('summary unavailable due to context limits') ||
+      content.includes('对话被压缩') ||
+      content.includes('上下文被压缩') ||
+      content.includes('上下文压缩');
+    if (!isContextBreak) return;
+
+    const now = Date.now();
+    if (now - lastContextBreakSyncAtRef.current < 60_000) return;
+    lastContextBreakSyncAtRef.current = now;
+
+    void syncProfileToAgent('context_break');
+  }, [messages, syncProfileToAgent]);
 
   const buildSessionText = useCallback(() => {
     const lines: string[] = [];
@@ -612,6 +942,13 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
           onSelectSession={handleSwitchSession}
           onDeleteSession={deleteSession}
           onToggle={toggleSidebar}
+          agentStatus={{
+            isConnected,
+            isLoading,
+            activeTools,
+            currentSession: sessions.find((s) => s.sessionKey === currentSessionKey),
+            lastThinking,
+          }}
         />
 
         <main className="flex-1 overflow-hidden flex flex-col relative">
@@ -861,9 +1198,25 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
           {/* Chat Input */}
           <ChatInput
-            onSend={(message: string, attachments: ChatAttachmentInput[]) =>
-              sendMessage({ text: message, attachments })
-            }
+            onSend={async (message: string, attachments: ChatAttachmentInput[]) => {
+              const hasProfileData =
+                Boolean(profile?.name?.trim()) ||
+                Boolean(profile?.role?.trim()) ||
+                Boolean(profile?.software?.length) ||
+                Boolean(profile?.frequentTopics?.length) ||
+                Boolean(profile?.learnedContext?.length) ||
+                Boolean(profile?.preferences && Object.keys(profile.preferences).length);
+
+              if (hasProfileData) {
+                try {
+                  await syncProfileToAgent('initial');
+                } catch (err) {
+                  console.error('Failed to sync profile to agent:', err);
+                }
+              }
+
+              sendMessage({ text: message, attachments });
+            }}
             onAbort={abortChat}
             disabled={isLoading || !isConnected}
             isLoading={isLoading}
@@ -883,12 +1236,24 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       <UserProfileModal
         key={`${userId}:${profileLoading ? 'loading' : profile?.lastUpdated ?? 'empty'}`}
         isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
+        onClose={handleCloseProfile}
         profile={profile}
         isLoading={profileLoading}
         isSaving={profileSaving}
         error={profileError}
         onSave={saveProfile}
+      />
+
+      <AgentInsightPanel
+        isConnected={isConnected}
+        isLoading={isLoading}
+        activeTools={activeTools}
+        currentSession={sessions.find((s) => s.sessionKey === currentSessionKey)}
+        lastThinking={lastThinking}
+        userId={userId}
+        userProfile={profile}
+        profileSyncInfo={profileSyncInfo}
+        recentToolTrace={recentToolTrace}
       />
     </div>
   );

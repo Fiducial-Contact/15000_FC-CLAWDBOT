@@ -28,6 +28,7 @@ export function createDefaultProfile(seed?: Partial<UserProfile>): UserProfile {
       language: seed?.preferences?.language ?? 'en',
       responseStyle: seed?.preferences?.responseStyle ?? 'concise',
       timezone: seed?.preferences?.timezone ?? getDefaultTimezone(),
+      workContext: seed?.preferences?.workContext ?? '',
     },
     frequentTopics: seed?.frequentTopics ?? [],
     learnedContext: seed?.learnedContext ?? [],
@@ -57,6 +58,7 @@ export function profileFromRow(row: DbRow): UserProfile {
   const tz = typeof prefs.timezone === 'string' && VALID_TIMEZONES.includes(prefs.timezone)
     ? prefs.timezone
     : 'Europe/London';
+  const workContext = typeof prefs.workContext === 'string' ? prefs.workContext : '';
 
   return {
     name: row.name ?? '',
@@ -66,6 +68,7 @@ export function profileFromRow(row: DbRow): UserProfile {
       language: lang,
       responseStyle: style,
       timezone: tz,
+      workContext,
     },
     frequentTopics: row.frequent_topics ?? [],
     learnedContext: row.learned_context ?? [],
@@ -83,6 +86,7 @@ export function profileToRow(profile: UserProfile, userId: string) {
       language: profile.preferences.language,
       responseStyle: profile.preferences.responseStyle,
       timezone: profile.preferences.timezone,
+      workContext: profile.preferences.workContext,
     },
     frequent_topics: profile.frequentTopics,
     learned_context: profile.learnedContext,

@@ -1193,6 +1193,20 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
   const mainSessionKey = buildSessionKey(buildPeerId(userId));
 
+  const fetchSessionHistory = useCallback(async (sessionKey: string) => {
+    if (!sessionKey) {
+      throw new Error('Missing session key');
+    }
+    if (!isUserWebchatSession(sessionKey, userId)) {
+      throw new Error('Unauthorized session key');
+    }
+    const client = clientRef.current;
+    if (!client || !client.isConnected()) {
+      throw new Error('Gateway not connected');
+    }
+    return client.getHistory(sessionKey);
+  }, [userId]);
+
   return {
     messages,
     sessions,
@@ -1214,5 +1228,6 @@ export function useGateway({ userId }: UseGatewayOptions) {
     toggleSidebar,
     abortChat,
     setSessionVerbose,
+    fetchSessionHistory,
   };
 }

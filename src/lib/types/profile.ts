@@ -2,6 +2,7 @@ export interface UserPreferences {
     language: 'en' | 'zh' | 'ja' | 'es' | 'fr' | 'de';
     responseStyle: 'concise' | 'detailed' | 'casual' | 'formal';
     timezone: string;
+    workContext: string;
 }
 
 export interface UserProfile {
@@ -21,7 +22,8 @@ export const MOCK_USER_PROFILE: UserProfile = {
     preferences: {
         language: 'en',
         responseStyle: 'concise',
-        timezone: 'Europe/London'
+        timezone: 'Europe/London',
+        workContext: 'Motion design for commercials, mostly AE + C4D. Prefers practical, step-by-step answers and export presets.',
     },
     frequentTopics: ['AE expressions', 'render settings'],
     learnedContext: [
