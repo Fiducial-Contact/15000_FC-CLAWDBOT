@@ -3,16 +3,17 @@
 import { memo, useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { LogOut, Sparkles, ChevronDown, KeyRound, Zap, Info } from 'lucide-react';
+import { LogOut, Sparkles, ChevronDown, KeyRound, Zap, Info, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface HeaderProps {
   userName?: string;
   onLogout?: () => void;
   onChangePassword?: () => void;
+  onOpenProfile?: () => void;
 }
 
-export const Header = memo(function Header({ userName, onLogout, onChangePassword }: HeaderProps) {
+export const Header = memo(function Header({ userName, onLogout, onChangePassword, onOpenProfile }: HeaderProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -78,11 +79,10 @@ export const Header = memo(function Header({ userName, onLogout, onChangePasswor
           <div className="relative" ref={dropdownRef}>
             <motion.button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-all ${
-                isDropdownOpen
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-all ${isDropdownOpen
                   ? 'bg-[var(--fc-subtle-gray)] ring-2 ring-[var(--fc-border-gray)]'
                   : 'bg-[var(--fc-subtle-gray)] hover:bg-[var(--fc-border-gray)]'
-              }`}
+                }`}
               whileTap={{ scale: 0.98 }}
             >
               <img
@@ -118,6 +118,18 @@ export const Header = memo(function Header({ userName, onLogout, onChangePasswor
                   </div>
 
                   <div className="py-1.5">
+                    {onOpenProfile && (
+                      <button
+                        onClick={() => {
+                          setIsDropdownOpen(false);
+                          onOpenProfile();
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--fc-dark-gray)] hover:bg-[var(--fc-subtle-gray)] transition-colors"
+                      >
+                        <User size={16} className="text-[var(--fc-body-gray)]" />
+                        My Profile
+                      </button>
+                    )}
                     {onChangePassword && (
                       <button
                         onClick={handleChangePassword}
