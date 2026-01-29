@@ -167,32 +167,30 @@ export const AgentInsightPanel = memo(function AgentInsightPanel({
     thoughtProcess: false,
   };
 
-  const [isExpanded, setIsExpanded] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    try {
-      return localStorage.getItem('agent-insight-expanded') !== 'false';
-    } catch { return true; }
-  });
-  const [openSections, setOpenSections] = useState<Record<PanelSectionKey, boolean>>(() => {
-    if (typeof window === 'undefined') return defaultSections;
-    try {
-      const raw = localStorage.getItem('agent-insight-sections-v1');
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<Record<PanelSectionKey, boolean>>;
-        return {
-          learningProfile: parsed.learningProfile ?? false,
-          profileSync: parsed.profileSync ?? false,
-          activeTools: parsed.activeTools ?? true,
-          researchTrace: parsed.researchTrace ?? true,
-          thoughtProcess: parsed.thoughtProcess ?? false,
-        };
-      }
-    } catch { /* ignore */ }
-    return defaultSections;
-  });
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [openSections, setOpenSections] = useState<Record<PanelSectionKey, boolean>>(defaultSections);
   const hydrated = useRef(false);
 
   useEffect(() => {
+    startTransition(() => {
+      try {
+        const stored = localStorage.getItem('agent-insight-expanded');
+        if (stored === 'false') setIsExpanded(false);
+      } catch { /* ignore */ }
+      try {
+        const raw = localStorage.getItem('agent-insight-sections-v1');
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<Record<PanelSectionKey, boolean>>;
+          setOpenSections({
+            learningProfile: parsed.learningProfile ?? false,
+            profileSync: parsed.profileSync ?? false,
+            activeTools: parsed.activeTools ?? true,
+            researchTrace: parsed.researchTrace ?? true,
+            thoughtProcess: parsed.thoughtProcess ?? false,
+          });
+        }
+      } catch { /* ignore */ }
+    });
     hydrated.current = true;
   }, []);
 
