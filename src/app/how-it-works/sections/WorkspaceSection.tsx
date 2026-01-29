@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FileText, BookOpen, Users, Fingerprint, Wrench } from 'lucide-react';
+import { FileText, BookOpen, Users, Brain, Heart, UserCog, Fingerprint, Wrench } from 'lucide-react';
 import { NetworkLayer } from '../components/NetworkLayer';
 import { NeuralNode } from '../components/NeuralNode';
 import { SynapseConnection } from '../components/SynapseConnection';
@@ -14,7 +14,7 @@ export function WorkspaceSection() {
     const nodes = [
         {
             id: 'agents',
-            position: { x: 150, y: 150 },
+            position: { x: 90, y: 90 },
             type: 'memory' as const,
             icon: BookOpen,
             label: 'AGENTS.md',
@@ -22,7 +22,7 @@ export function WorkspaceSection() {
         },
         {
             id: 'soul',
-            position: { x: 350, y: 100 },
+            position: { x: 300, y: 60 },
             type: 'memory' as const,
             icon: FileText,
             label: 'SOUL.md',
@@ -30,7 +30,7 @@ export function WorkspaceSection() {
         },
         {
             id: 'user',
-            position: { x: 550, y: 150 },
+            position: { x: 510, y: 90 },
             type: 'memory' as const,
             icon: Users,
             label: 'USER.md',
@@ -38,19 +38,43 @@ export function WorkspaceSection() {
         },
         {
             id: 'identity',
-            position: { x: 150, y: 300 },
+            position: { x: 90, y: 220 },
             type: 'memory' as const,
             icon: Fingerprint,
             label: 'IDENTITY.md',
             description: 'Agent Identity',
         },
         {
+            id: 'heartbeat',
+            position: { x: 300, y: 220 },
+            type: 'memory' as const,
+            icon: Heart,
+            label: 'HEARTBEAT.md',
+            description: 'Periodic Tasks',
+        },
+        {
+            id: 'userprofiles',
+            position: { x: 510, y: 220 },
+            type: 'memory' as const,
+            icon: UserCog,
+            label: 'memory/users/',
+            description: 'Per-User Learning',
+        },
+        {
             id: 'tools',
-            position: { x: 350, y: 350 },
+            position: { x: 90, y: 350 },
             type: 'memory' as const,
             icon: Wrench,
             label: 'TOOLS.md',
             description: 'Tool Definitions',
+        },
+        {
+            id: 'selfreview',
+            position: { x: 300, y: 350 },
+            type: 'memory' as const,
+            icon: Brain,
+            label: 'self-review.md',
+            description: 'Self-Reflection Log',
         },
     ];
 
@@ -60,6 +84,10 @@ export function WorkspaceSection() {
         { from: 'agents', to: 'identity' },
         { from: 'identity', to: 'tools' },
         { from: 'soul', to: 'tools' },
+        { from: 'agents', to: 'heartbeat' },
+        { from: 'heartbeat', to: 'selfreview' },
+        { from: 'heartbeat', to: 'userprofiles' },
+        { from: 'user', to: 'userprofiles' },
     ];
 
     return (
@@ -70,7 +98,7 @@ export function WorkspaceSection() {
             accentColor={accentColor}
             sectionRange={sectionRange}
         >
-            <div className="relative h-[500px] mt-12">
+            <div className="relative h-[540px] mt-12">
                 {/* Connection lines */}
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                     {connections.map((conn) => {
@@ -111,7 +139,7 @@ export function WorkspaceSection() {
                     >
                         {node.id === 'agents' && (
                             <div className="space-y-2">
-                                <p className="text-xs text-[var(--fc-body-gray)]">Defines session behavior</p>
+                                <p className="text-xs text-[var(--fc-body-gray)]">Session behavior & learning rules</p>
                                 <div className="text-[10px] text-[var(--fc-light-gray)]">
                                     workspace/AGENTS.md
                                 </div>
@@ -127,7 +155,7 @@ export function WorkspaceSection() {
                         )}
                         {node.id === 'user' && (
                             <div className="space-y-2">
-                                <p className="text-xs text-[var(--fc-body-gray)]">User context template</p>
+                                <p className="text-xs text-[var(--fc-body-gray)]">Team context template</p>
                                 <div className="text-[10px] text-[var(--fc-light-gray)]">
                                     workspace/USER.md
                                 </div>
@@ -141,11 +169,39 @@ export function WorkspaceSection() {
                                 </div>
                             </div>
                         )}
+                        {node.id === 'heartbeat' && (
+                            <div className="space-y-2">
+                                <p className="text-xs text-[var(--fc-body-gray)]">Every 3h (09:00-17:30)</p>
+                                <div className="flex flex-wrap gap-1">
+                                    {['Learn', 'Review', 'Maintain'].map((tag) => (
+                                        <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
+                                            {tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         {node.id === 'tools' && (
                             <div className="space-y-2">
                                 <p className="text-xs text-[var(--fc-body-gray)]">Available capabilities</p>
                                 <div className="text-[10px] text-[var(--fc-light-gray)]">
                                     workspace/TOOLS.md
+                                </div>
+                            </div>
+                        )}
+                        {node.id === 'selfreview' && (
+                            <div className="space-y-2">
+                                <p className="text-xs text-[var(--fc-body-gray)]">Every 6h self-check</p>
+                                <div className="text-[10px] text-[var(--fc-light-gray)]">
+                                    TAG → MISS → FIX
+                                </div>
+                            </div>
+                        )}
+                        {node.id === 'userprofiles' && (
+                            <div className="space-y-2">
+                                <p className="text-xs text-[var(--fc-body-gray)]">Per-user preferences</p>
+                                <div className="text-[10px] text-[var(--fc-light-gray)]">
+                                    memory/users/webchat/*.json
                                 </div>
                             </div>
                         )}
@@ -158,17 +214,18 @@ export function WorkspaceSection() {
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl border border-[var(--fc-border-gray)] p-5 shadow-sm">
                     <h3 className="text-sm font-semibold text-[var(--fc-black)] mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                        workspace/ (Shared Config)
+                        Workspace Core Files
                     </h3>
                     <div className="font-mono text-[11px] space-y-1 text-[var(--fc-body-gray)]">
                         {[
-                            { file: 'AGENTS.md', desc: 'Session behavior rules (memory, security, group chat)' },
-                            { file: 'SOUL.md', desc: 'Agent personality (opinionated, autonomous)' },
-                            { file: 'USER.md', desc: 'User info template (name, timezone, prefs)' },
-                            { file: 'IDENTITY.md', desc: 'Agent identity (name, bio, emoji)' },
-                            { file: 'BOOTSTRAP.md', desc: 'First-run guide (establish identity)' },
-                            { file: 'HEARTBEAT.md', desc: 'Heartbeat task list (editable)' },
-                            { file: 'TOOLS.md', desc: 'Local tool config (SSH, camera, TTS)' },
+                            { file: 'AGENTS.md', desc: 'Session rules + learning policy' },
+                            { file: 'SOUL.md', desc: 'Personality & tone' },
+                            { file: 'USER.md', desc: 'Team context template' },
+                            { file: 'IDENTITY.md', desc: 'Agent identity' },
+                            { file: 'TOOLS.md', desc: 'Tool definitions' },
+                            { file: 'HEARTBEAT.md', desc: 'Learning & maintenance schedule' },
+                            { file: 'memory/self-review.md', desc: 'Self-reflection log' },
+                            { file: 'memory/users/', desc: 'Per-user memory store' },
                         ].map((item) => (
                             <div key={item.file} className="flex items-start gap-2 py-1">
                                 <span className="text-orange-600 flex-shrink-0">├──</span>
@@ -183,35 +240,59 @@ export function WorkspaceSection() {
 
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl border border-[var(--fc-border-gray)] p-5 shadow-sm">
                     <h3 className="text-sm font-semibold text-[var(--fc-black)] mb-4 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                        workspace/team/ (Team Config)
+                        <span className="w-2 h-2 rounded-full bg-violet-500"></span>
+                        Learning & Per-User Memory
                     </h3>
-                    <div className="bg-blue-50 rounded-lg p-4 mb-4">
-                        <div className="font-mono text-[11px]">
-                            <span className="text-blue-600">└── team/</span>
-                            <div className="ml-4 mt-1">
-                                <span className="text-blue-600">└──</span>
-                                <span className="text-[var(--fc-black)] font-medium ml-1">AGENTS.md</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <h4 className="text-xs font-semibold text-[var(--fc-black)]">Team Assistant Role:</h4>
-                        <div className="space-y-1">
+                    <div className="bg-rose-50 rounded-lg p-3 mb-4">
+                        <div className="text-xs font-medium text-[var(--fc-black)] mb-2">Every 3 hours (09:00-17:30)</div>
+                        <div className="space-y-2 text-[10px]">
                             {[
-                                { label: 'Tech Support (AE/Premiere)', color: 'emerald' },
-                                { label: 'Project Status Query', color: 'blue' },
-                                { label: 'Format Conversion', color: 'purple' },
+                                { step: '1', label: 'Scan conversations', desc: 'Find learning triggers' },
+                                { step: '2', label: 'Update profiles', desc: 'Store preferences & context' },
+                                { step: '3', label: 'Self-review', desc: 'Every 6h: what to improve' },
                             ].map((item) => (
-                                <div key={item.label} className={`text-[10px] px-2 py-1 rounded bg-${item.color}-50 text-${item.color}-700`}>
-                                    ✓ {item.label}
+                                <div key={item.step} className="flex items-start gap-2">
+                                    <span className="w-4 h-4 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0 text-[9px] font-bold">
+                                        {item.step}
+                                    </span>
+                                    <div>
+                                        <span className="text-[var(--fc-black)] font-medium">{item.label}</span>
+                                        <span className="text-[var(--fc-light-gray)] ml-1">- {item.desc}</span>
+                                    </div>
                                 </div>
                             ))}
                         </div>
-                        <div className="mt-3 pt-3 border-t border-[var(--fc-border-gray)]">
-                            <p className="text-[10px] text-[var(--fc-light-gray)]">
-                                Restricted: Creative/strategic decisions → Forward to Haiwei
-                            </p>
+                        <div className="text-[10px] text-[var(--fc-body-gray)] mt-3">
+                            <span className="font-medium">After-hours:</span>
+                            <span className="ml-1">Daily 20:00 maintenance check</span>
+                        </div>
+                        <div className="text-[10px] text-[var(--fc-body-gray)] mt-3">
+                            <span className="font-medium">Triggers:</span>
+                            <span className="ml-1">&quot;记住这个&quot; · Repeated mentions · Corrections</span>
+                        </div>
+                    </div>
+                    <div className="font-mono text-[11px] space-y-1 text-[var(--fc-body-gray)] mb-3">
+                        <div className="text-violet-600">memory/users/</div>
+                        {[
+                            { path: 'webchat/<userId>.profile.json', desc: 'Structured preferences' },
+                            { path: 'webchat/<userId>.md', desc: 'Free-form notes' },
+                            { path: 'webchat/<userId>.tasks.json', desc: 'Reminders' },
+                        ].map((item) => (
+                            <div key={item.path} className="flex items-start gap-2 py-1 ml-2">
+                                <span className="text-violet-400 flex-shrink-0">├──</span>
+                                <div>
+                                    <span className="text-[var(--fc-black)]">{item.path}</span>
+                                    <span className="text-[var(--fc-light-gray)] ml-2">- {item.desc}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="bg-violet-50 rounded-lg p-3">
+                        <div className="text-[10px] font-medium text-[var(--fc-black)] mb-2">Profile Schema</div>
+                        <div className="font-mono text-[9px] text-violet-700 space-y-0.5">
+                            <div>{`{ name, role, software[] }`}</div>
+                            <div>{`{ preferences: { language, responseStyle } }`}</div>
+                            <div>{`{ learnedContext: [...] }`}</div>
                         </div>
                     </div>
                 </div>

@@ -184,16 +184,23 @@ export function GatewayLayerSection() {
                     </h3>
                     <div className="space-y-3">
                         {[
-                            { name: 'work', model: 'claude-sonnet-4-5', context: '1,000K', purpose: 'Web Chat Team Service', heartbeat: 'disabled' },
-                            { name: 'opus', model: 'claude-opus-4-5', context: '200K', purpose: 'WhatsApp', heartbeat: '30m' },
-                            { name: 'main', model: 'claude-opus-4-5', context: '200K', purpose: 'Cron / Automation', heartbeat: 'disabled' },
+                            { name: 'work', model: 'claude-sonnet-4-5', context: '1,000K', purpose: 'Web Chat Team Service', heartbeat: '3h', activeHours: '09:00-17:30' },
+                            { name: 'opus', model: 'claude-opus-4-5', context: '200K', purpose: 'WhatsApp Personal', heartbeat: '30m', activeHours: '08:00-23:00' },
+                            { name: 'main', model: 'claude-opus-4-5', context: '200K', purpose: 'Cron / Automation', heartbeat: 'disabled', activeHours: null },
                         ].map((agent) => (
                             <div key={agent.name} className="bg-slate-50 rounded-lg p-3">
                                 <div className="flex items-center justify-between mb-2">
                                     <span className="font-mono text-sm font-semibold text-[var(--fc-black)]">{agent.name}</span>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${agent.heartbeat === 'disabled' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-700'}`}>
-                                        Heartbeat: {agent.heartbeat}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        {agent.activeHours && (
+                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                                                {agent.activeHours}
+                                            </span>
+                                        )}
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${agent.heartbeat === 'disabled' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-700'}`}>
+                                            ♥ {agent.heartbeat}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 text-[10px]">
                                     <div>

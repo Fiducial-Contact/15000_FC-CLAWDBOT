@@ -29,11 +29,11 @@ const nodeData = [
         )
     },
 
-    // --- Layer 2: Channels (y: 22) ---
+    // --- Layer 2: Channels (y: 19) ---
     {
         id: 'ch_whatsapp',
         x: 12,
-        y: 22,
+        y: 19,
         type: 'channel',
         icon: SiWhatsapp,
         label: 'WhatsApp',
@@ -44,7 +44,7 @@ const nodeData = [
     {
         id: 'ch_teams',
         x: 37,
-        y: 22, // Aligned
+        y: 19,
         type: 'channel',
         icon: MessagesSquare,
         label: 'MS Teams',
@@ -55,7 +55,7 @@ const nodeData = [
     {
         id: 'ch_web',
         x: 63,
-        y: 22,
+        y: 19,
         type: 'channel',
         icon: SiNextdotjs,
         label: 'Web Chat',
@@ -66,7 +66,7 @@ const nodeData = [
     {
         id: 'ch_telegram',
         x: 88,
-        y: 22,
+        y: 19,
         type: 'channel',
         icon: SiTelegram,
         label: 'Telegram',
@@ -75,11 +75,11 @@ const nodeData = [
         details: <p>Optimized for group interactions, quick commands, and broadcast notifications.</p>
     },
 
-    // --- Layer 3: Gateway Cluster (y: 45) ---
+    // --- Layer 3: Gateway Cluster (y: 35) ---
     {
         id: 'net_tailscale',
         x: 20,
-        y: 45,
+        y: 35,
         type: 'gateway',
         icon: SiTailscale,
         label: 'Tailscale',
@@ -90,7 +90,7 @@ const nodeData = [
     {
         id: 'mod_session',
         x: 40,
-        y: 45,
+        y: 35,
         type: 'gateway',
         icon: Activity,
         label: 'Session Mgr',
@@ -101,7 +101,7 @@ const nodeData = [
     {
         id: 'gateway',
         x: 60,
-        y: 45,
+        y: 35,
         type: 'gateway',
         icon: Cpu,
         label: 'Gateway Engine',
@@ -112,7 +112,7 @@ const nodeData = [
     {
         id: 'mod_security',
         x: 80,
-        y: 45,
+        y: 35,
         type: 'gateway',
         icon: Shield,
         label: 'Security',
@@ -121,33 +121,33 @@ const nodeData = [
         details: <p>Manages Allowlist, Token Auth, and Sandbox execution environments.</p>
     },
 
-    // --- Layer 4: Agents (y: 64) ---
+    // --- Layer 4: Agents (y: 51) ---
     {
         id: 'ag_work',
         x: 32,
-        y: 64,
+        y: 51,
         type: 'gateway',
         icon: Bot,
         label: 'Agent: Work',
         description: 'Team Service',
         accentColor: '#f59e0b',
-        details: <p>Model: claude-3-5-sonnet. Specialized for team queries, technical support, and web chat interactions. 1000K Context.</p>
+        details: <p>Model: claude-sonnet-4-5. Specialized for team queries, technical support, and web chat interactions. 1000K Context.</p>
     },
     {
         id: 'ag_opus',
         x: 50,
-        y: 64,
+        y: 51,
         type: 'gateway',
         icon: Brain,
         label: 'Agent: Opus',
         description: 'Deep Reasoning',
         accentColor: '#ec4899',
-        details: <p>Model: claude-3-opus. Handles complex reasoning tasks, creative writing, and sensitive personal assistance.</p>
+        details: <p>Model: claude-opus-4-5. Handles complex reasoning tasks, creative writing, and sensitive personal assistance.</p>
     },
     {
         id: 'ag_main',
         x: 68,
-        y: 64,
+        y: 51,
         type: 'gateway',
         icon: Terminal,
         label: 'Agent: Main',
@@ -156,11 +156,11 @@ const nodeData = [
         details: <p>Handles cron jobs, system maintenance, morning reports, and automated research tasks.</p>
     },
 
-    // --- Layer 5: Claude API (y: 78) ---
+    // --- Layer 5: Claude API (y: 67) ---
     {
         id: 'ai_claude',
         x: 50,
-        y: 78,
+        y: 67,
         type: 'core',
         icon: SiClaude,
         label: 'Claude API',
@@ -169,11 +169,11 @@ const nodeData = [
         details: <p>The brain behind the agents. Provides LLM capabilities for all nodes.</p>
     },
 
-    // --- Layer 6: Infrastructure Services (y: 92) ---
+    // --- Layer 6: Infrastructure Services (y: 83) ---
     {
         id: 'svc_supabase',
         x: 15,
-        y: 92,
+        y: 83,
         type: 'service',
         icon: SiSupabase,
         label: 'Supabase',
@@ -184,7 +184,7 @@ const nodeData = [
     {
         id: 'svc_azure',
         x: 38,
-        y: 92,
+        y: 83,
         type: 'service',
         icon: Cloud,
         label: 'Azure Bot',
@@ -195,7 +195,7 @@ const nodeData = [
     {
         id: 'svc_notion',
         x: 62,
-        y: 92,
+        y: 83,
         type: 'service',
         icon: SiNotion,
         label: 'Notion',
@@ -206,7 +206,7 @@ const nodeData = [
     {
         id: 'svc_vercel',
         x: 85,
-        y: 92,
+        y: 83,
         type: 'service',
         icon: SiVercel,
         label: 'Vercel',
@@ -276,7 +276,7 @@ export function ArchitectureGraph() {
                 viewBox="0 0 100 100"
                 preserveAspectRatio="none"
             >
-                {connections.map((conn, i) => {
+                {connections.map((conn) => {
                     const startNode = nodeData.find(n => n.id === conn.from)!;
                     const endNode = nodeData.find(n => n.id === conn.to)!;
 
@@ -327,10 +327,6 @@ export function ArchitectureGraph() {
                             <h2 className="text-sm font-bold text-[var(--fc-black)] tracking-tight leading-none">System Architecture</h2>
                             <span className="text-[9px] uppercase tracking-widest text-[var(--fc-body-gray)] opacity-60 font-semibold mt-0.5">Live Monitor</span>
                         </div>
-                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
-                            <span className="w-1 h-1 rounded-full bg-green-500 animate-pulse"></span>
-                            <span className="text-[9px] font-bold text-green-700 tracking-wide">ONLINE</span>
-                        </div>
                     </div>
 
                     <div className="space-y-2">
@@ -365,6 +361,7 @@ export function ArchitectureGraph() {
                     </div>
                 </div>
             </div>
+
         </div>
     );
 }
