@@ -23,6 +23,7 @@ interface ChatMessageProps {
   showTools?: boolean;
   onRetryAttachment?: (messageId: string, attachmentId: string) => void;
   isGroupContinuation?: boolean;
+  isStreaming?: boolean;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -571,6 +572,7 @@ export const ChatMessage = memo(function ChatMessage({
   showTools = false,
   onRetryAttachment,
   isGroupContinuation = false,
+  isStreaming = false,
 }: ChatMessageProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const isUser = role === 'user';
@@ -710,6 +712,12 @@ export const ChatMessage = memo(function ChatMessage({
                       >
                         {displayContent}
                       </ReactMarkdown>
+                      {isStreaming && (
+                        <span
+                          className="inline-block w-[3px] h-[1em] bg-[var(--fc-body-gray)] rounded-full align-middle ml-0.5 animate-blink"
+                          aria-hidden="true"
+                        />
+                      )}
                     </div>
                   )
                 ) : null}

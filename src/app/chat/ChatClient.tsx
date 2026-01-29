@@ -828,6 +828,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                       messageId="stream"
                       content={displayStreamingContent}
                       role="assistant"
+                      isStreaming
                     />
                   )}
 

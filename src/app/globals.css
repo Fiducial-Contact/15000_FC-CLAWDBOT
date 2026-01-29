@@ -248,6 +248,15 @@ p {
   animation: node-pulse 3s ease-in-out infinite;
 }
 
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-blink {
+  animation: blink 0.8s step-end infinite;
+}
+
 /* Markdown Content Styles */
 .markdown-content {
   @apply text-[var(--fc-black)];
