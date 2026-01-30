@@ -14,6 +14,15 @@ import {
 
 import type { SessionEntry, ToolEventPayload } from '@/lib/gateway/types';
 
+type SessionListEntry = SessionEntry & {
+  resetAt?: string;
+};
+
+const DEFAULT_MAIN_TITLE = 'Main Chat';
+const DEFAULT_NEW_TITLE = 'New Chat';
+const RESET_TITLE_WINDOW_MS = 60 * 60 * 1000;
+const GENERATED_SESSION_ID_REGEX = /^\\d{10,}-[a-z0-9]{3,}$/i;
+
 export interface AgentStatusProps {
   isConnected: boolean;
   isLoading: boolean;
@@ -23,7 +32,7 @@ export interface AgentStatusProps {
 }
 
 interface ChatSidebarProps {
-  sessions: SessionEntry[];
+  sessions: SessionListEntry[];
   currentSessionKey: string;
   mainSessionKey: string;
   isOpen: boolean;
@@ -102,15 +111,35 @@ const Tooltip = memo(function Tooltip({
   );
 });
 
-function getSessionTitle(session: SessionEntry): string {
-  if (session.displayName) return session.displayName;
-  if (!session.sessionKey) return 'New Chat';
-  const parts = session.sessionKey.split(':');
-  const lastPart = parts[parts.length - 1];
-  if (lastPart?.includes('-')) {
-    return `Chat ${lastPart.slice(0, 6)}`;
+function getSessionTitle(session: SessionListEntry): string {
+  let baseTitle = session.displayName || '';
+  if (baseTitle === 'fc-team-chat') {
+    baseTitle = '';
   }
-  return 'Main Chat';
+  if (!baseTitle) {
+    if (!session.sessionKey) return DEFAULT_NEW_TITLE;
+    const sessionId = typeof session.sessionId === 'string' ? session.sessionId : '';
+    if (sessionId && GENERATED_SESSION_ID_REGEX.test(sessionId)) {
+      const randomPart = sessionId.split('-')[1] || '';
+      baseTitle = `Chat ${randomPart.slice(0, 6)}`;
+    } else if (sessionId) {
+      // Most likely the pinned/main session (sessionId is a stable user id).
+      baseTitle = DEFAULT_MAIN_TITLE;
+    } else {
+      // Stable, unique-ish fallback derived from the session key.
+      const keySuffix = session.sessionKey.replace(/[^a-z0-9]/gi, '').slice(-6);
+      baseTitle = keySuffix ? `Chat ${keySuffix}` : DEFAULT_NEW_TITLE;
+    }
+  }
+
+  if (session.resetAt) {
+    const resetTime = new Date(session.resetAt).getTime();
+    if (!Number.isNaN(resetTime) && Date.now() - resetTime < RESET_TITLE_WINDOW_MS) {
+      return `Reset: ${baseTitle}`;
+    }
+  }
+
+  return baseTitle;
 }
 
 function formatSessionDate(dateStr?: string): string {
@@ -130,11 +159,11 @@ function formatSessionDate(dateStr?: string): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function groupSessionsByDate(sessions: SessionEntry[]) {
-  const groups: { label: string; sessions: SessionEntry[] }[] = [];
-  const today: SessionEntry[] = [];
-  const yesterday: SessionEntry[] = [];
-  const previous: SessionEntry[] = [];
+function groupSessionsByDate(sessions: SessionListEntry[]) {
+  const groups: { label: string; sessions: SessionListEntry[] }[] = [];
+  const today: SessionListEntry[] = [];
+  const yesterday: SessionListEntry[] = [];
+  const previous: SessionListEntry[] = [];
 
   sessions.forEach((session) => {
     if (!session.updatedAt) {
@@ -267,7 +296,7 @@ const IconRail = memo(function IconRail({
   onToggle,
   agentStatus,
 }: {
-  sessions: SessionEntry[];
+  sessions: SessionListEntry[];
   currentSessionKey: string;
   mainSessionKey: string;
   onNewSession: () => void;
@@ -395,9 +424,9 @@ export const ChatSidebar = memo(function ChatSidebar({
   agentStatus,
 }: ChatSidebarProps) {
   const [isIconRail, setIsIconRail] = useState(false);
-  const [sessionToDelete, setSessionToDelete] = useState<SessionEntry | null>(null);
+  const [sessionToDelete, setSessionToDelete] = useState<SessionListEntry | null>(null);
 
-  const handleDeleteClick = useCallback((session: SessionEntry) => {
+  const handleDeleteClick = useCallback((session: SessionListEntry) => {
     setSessionToDelete(session);
   }, []);
 
@@ -455,7 +484,7 @@ export const ChatSidebar = memo(function ChatSidebar({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const renderSession = (session: SessionEntry, isPinned: boolean) => {
+  const renderSession = (session: SessionListEntry, isPinned: boolean) => {
     const isActive = session.sessionKey === currentSessionKey;
     const unreadCount = session.unreadCount || 0;
     return (

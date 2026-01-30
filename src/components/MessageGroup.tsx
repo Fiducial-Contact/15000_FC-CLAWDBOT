@@ -33,11 +33,12 @@ interface MessageGroupProps {
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1500);
     } catch (err) {
       console.error('Failed to copy:', err);
     }
@@ -612,11 +613,12 @@ export const MessageGroup = memo(function MessageGroup({
 
           {textParts.map((part, idx) => (
             <div key={part.messageId} className="relative group max-w-full">
-              <div className={`px-4 py-3 text-[14px] leading-relaxed max-w-full overflow-hidden break-words ${
-                isUser
-                  ? 'bg-[var(--fc-charcoal)] text-white rounded-2xl rounded-tr-sm'
-                  : 'bg-white text-[var(--fc-black)] rounded-2xl rounded-tl-sm shadow-sm border border-[var(--fc-border-gray)]'
-              }`}>
+              <div
+                className={`px-4 py-3 text-[14px] leading-relaxed max-w-full overflow-hidden break-words ${
+                  isUser
+                    ? 'bg-[var(--fc-charcoal)] text-white rounded-2xl rounded-tr-sm'
+                    : 'bg-white text-[var(--fc-black)] rounded-2xl rounded-tl-sm shadow-sm border border-[var(--fc-border-gray)]'
+                }`}>
                 {idx === 0 && (allImages.length > 0 || allVideos.length > 0 || allFiles.length > 0) && (
                   <div className="space-y-3 mb-3">
                     {allImages.length > 0 && <ImageGrid images={allImages} onImageClick={setLightboxIndex} />}
@@ -709,6 +711,7 @@ export const MessageGroup = memo(function MessageGroup({
           />
         )}
       </AnimatePresence>
+
     </motion.div>
   );
 });

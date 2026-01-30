@@ -44,7 +44,7 @@ export default function HowItWorksPage() {
             }} />
 
             {/* SVG Circuit Lines */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none">
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 522" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="gradBlue" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.5" />
@@ -56,31 +56,31 @@ export default function HowItWorksPage() {
                 </linearGradient>
               </defs>
               {/* User fan-out to channels - L-shaped */}
-              <path d="M 50% 70 L 50% 85 L 18% 85 L 18% 105" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" fill="none" />
-              <path d="M 50% 70 L 50% 85 L 36% 85 L 36% 105" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" fill="none" />
-              <path d="M 50% 70 L 50% 85 L 64% 85 L 64% 105" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" fill="none" />
-              <path d="M 50% 70 L 50% 85 L 82% 85 L 82% 105" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 50 112 L 50 136 L 36 136 L 36 160" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 50 112 L 50 136 L 45 136 L 45 160" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 50 112 L 50 136 L 55 136 L 55 160" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 50 112 L 50 136 L 64 136 L 64 160" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" fill="none" />
               {/* Channels converge to gateway - L-shaped */}
-              <path d="M 18% 130 L 18% 145 L 50% 145 L 50% 160" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
-              <path d="M 36% 130 L 36% 150 L 50% 150" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
-              <path d="M 64% 130 L 64% 150 L 50% 150" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
-              <path d="M 82% 130 L 82% 145 L 50% 145" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 36 188 L 36 208 L 50 208 L 50 228" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 45 188 L 45 212 L 50 212" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 55 188 L 55 212 L 50 212" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 64 188 L 64 208 L 50 208" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
               {/* Gateway to agents - branching */}
-              <path d="M 50% 195 L 50% 210 L 40% 210 L 40% 225" stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.3" fill="none" />
-              <path d="M 50% 195 L 50% 210 L 60% 210 L 60% 225" stroke="#64748b" strokeWidth="1" strokeOpacity="0.15" fill="none" />
+              <path d="M 50 256 L 50 276 L 44 276 L 44 296" stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.3" fill="none" />
+              <path d="M 50 256 L 50 276 L 56 276 L 56 296" stroke="#64748b" strokeWidth="1" strokeOpacity="0.15" fill="none" />
               {/* Agents to Claude - merge */}
-              <path d="M 40% 265 L 40% 280 L 50% 280 L 50% 295" stroke="#f97316" strokeWidth="1" strokeOpacity="0.3" fill="none" />
-              <path d="M 60% 265 L 60% 280 L 50% 280" stroke="#f97316" strokeWidth="1" strokeOpacity="0.15" fill="none" />
+              <path d="M 44 342 L 44 362 L 50 362 L 50 382" stroke="#f97316" strokeWidth="1" strokeOpacity="0.3" fill="none" />
+              <path d="M 56 342 L 56 362 L 50 362" stroke="#f97316" strokeWidth="1" strokeOpacity="0.15" fill="none" />
               {/* Claude to services - fan out */}
-              <path d="M 50% 335 L 50% 350 L 20% 350 L 20% 365" stroke="#3ecf8e" strokeWidth="1" strokeOpacity="0.25" fill="none" />
-              <path d="M 50% 335 L 50% 355 L 38% 355 L 38% 365" stroke="#0078d4" strokeWidth="1" strokeOpacity="0.25" fill="none" />
-              <path d="M 50% 335 L 50% 355 L 62% 355 L 62% 365" stroke="#64748b" strokeWidth="1" strokeOpacity="0.15" fill="none" />
-              <path d="M 50% 335 L 50% 350 L 80% 350 L 80% 365" stroke="#64748b" strokeWidth="1" strokeOpacity="0.15" fill="none" />
+              <path d="M 50 422 L 50 442 L 36 442 L 36 462" stroke="#3ecf8e" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 50 422 L 50 445 L 45 445 L 45 462" stroke="#0078d4" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 50 422 L 50 445 L 55 445 L 55 462" stroke="#64748b" strokeWidth="1" strokeOpacity="0.15" fill="none" />
+              <path d="M 50 422 L 50 442 L 64 442 L 64 462" stroke="#64748b" strokeWidth="1" strokeOpacity="0.15" fill="none" />
               {/* Decorative horizontal rails */}
-              <line x1="5%" y1="145" x2="15%" y2="145" stroke="#334155" strokeWidth="1" strokeOpacity="0.3" />
-              <line x1="85%" y1="145" x2="95%" y2="145" stroke="#334155" strokeWidth="1" strokeOpacity="0.3" />
-              <line x1="5%" y1="280" x2="25%" y2="280" stroke="#334155" strokeWidth="1" strokeOpacity="0.2" />
-              <line x1="75%" y1="280" x2="95%" y2="280" stroke="#334155" strokeWidth="1" strokeOpacity="0.2" />
+              <line x1="5" y1="208" x2="15" y2="208" stroke="#334155" strokeWidth="1" strokeOpacity="0.3" />
+              <line x1="85" y1="208" x2="95" y2="208" stroke="#334155" strokeWidth="1" strokeOpacity="0.3" />
+              <line x1="5" y1="362" x2="25" y2="362" stroke="#334155" strokeWidth="1" strokeOpacity="0.2" />
+              <line x1="75" y1="362" x2="95" y2="362" stroke="#334155" strokeWidth="1" strokeOpacity="0.2" />
             </svg>
 
             <div className="text-slate-500 text-xs mb-6 font-mono relative z-10">{'// System Architecture'}</div>
@@ -177,35 +177,35 @@ export default function HowItWorksPage() {
             }} />
 
             {/* SVG Circuit Lines */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none">
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 474" preserveAspectRatio="none">
               {/* Heartbeat to files - fan out */}
-              <path d="M 50% 55 L 50% 70 L 30% 70 L 30% 85" stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.25" fill="none" />
-              <path d="M 50% 55 L 50% 85" stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.25" fill="none" />
-              <path d="M 50% 55 L 50% 70 L 70% 70 L 70% 85" stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 50 108 L 50 128 L 35 128 L 35 148" stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 50 108 L 50 148" stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 50 108 L 50 128 L 65 128 L 65 148" stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.25" fill="none" />
               {/* Files converge to scan */}
-              <path d="M 30% 110 L 30% 120 L 50% 120 L 50% 135" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
-              <path d="M 50% 110 L 50% 135" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
-              <path d="M 70% 110 L 70% 120 L 50% 120" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 35 175 L 35 191 L 50 191 L 50 207" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 50 175 L 50 207" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 65 175 L 65 191 L 50 191" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
               {/* Scan to triggers - fan out */}
-              <path d="M 50% 165 L 50% 180 L 28% 180 L 28% 195" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
-              <path d="M 50% 165 L 50% 195" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
-              <path d="M 50% 165 L 50% 180 L 72% 180 L 72% 195" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 50 243 L 50 259 L 35 259 L 35 275" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 50 243 L 50 275" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 50 243 L 50 259 L 65 259 L 65 275" stroke="#a855f7" strokeWidth="1" strokeOpacity="0.2" fill="none" />
               {/* Triggers to actions - branch */}
-              <path d="M 50% 220 L 50% 235 L 40% 235 L 40% 250" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
-              <path d="M 50% 220 L 50% 235 L 60% 235 L 60% 250" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 50 297 L 50 313 L 44 313 L 44 329" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+              <path d="M 50 297 L 50 313 L 56 313 L 56 329" stroke="#64748b" strokeWidth="1" strokeOpacity="0.2" fill="none" />
               {/* Actions merge to output */}
-              <path d="M 40% 290 L 40% 305 L 50% 305 L 50% 320" stroke="#3ecf8e" strokeWidth="1" strokeOpacity="0.25" fill="none" />
-              <path d="M 60% 290 L 60% 305 L 50% 305" stroke="#f43f5e" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 44 374 L 44 390 L 50 390 L 50 406" stroke="#3ecf8e" strokeWidth="1" strokeOpacity="0.25" fill="none" />
+              <path d="M 56 374 L 56 390 L 50 390" stroke="#f43f5e" strokeWidth="1" strokeOpacity="0.25" fill="none" />
               {/* Decorative side rails */}
-              <line x1="8%" y1="120" x2="18%" y2="120" stroke="#334155" strokeWidth="1" strokeOpacity="0.25" />
-              <line x1="82%" y1="120" x2="92%" y2="120" stroke="#334155" strokeWidth="1" strokeOpacity="0.25" />
-              <line x1="8%" y1="235" x2="22%" y2="235" stroke="#334155" strokeWidth="1" strokeOpacity="0.2" />
-              <line x1="78%" y1="235" x2="92%" y2="235" stroke="#334155" strokeWidth="1" strokeOpacity="0.2" />
+              <line x1="8" y1="191" x2="18" y2="191" stroke="#334155" strokeWidth="1" strokeOpacity="0.25" />
+              <line x1="82" y1="191" x2="92" y2="191" stroke="#334155" strokeWidth="1" strokeOpacity="0.25" />
+              <line x1="8" y1="313" x2="22" y2="313" stroke="#334155" strokeWidth="1" strokeOpacity="0.2" />
+              <line x1="78" y1="313" x2="92" y2="313" stroke="#334155" strokeWidth="1" strokeOpacity="0.2" />
               {/* Corner accents */}
-              <path d="M 8% 55 L 8% 45 L 18% 45" stroke="#334155" strokeWidth="1" strokeOpacity="0.15" fill="none" />
-              <path d="M 92% 55 L 92% 45 L 82% 45" stroke="#334155" strokeWidth="1" strokeOpacity="0.15" fill="none" />
-              <path d="M 8% 320 L 8% 330 L 18% 330" stroke="#334155" strokeWidth="1" strokeOpacity="0.15" fill="none" />
-              <path d="M 92% 320 L 92% 330 L 82% 330" stroke="#334155" strokeWidth="1" strokeOpacity="0.15" fill="none" />
+              <path d="M 8 108 L 8 98 L 18 98" stroke="#334155" strokeWidth="1" strokeOpacity="0.15" fill="none" />
+              <path d="M 92 108 L 92 98 L 82 98" stroke="#334155" strokeWidth="1" strokeOpacity="0.15" fill="none" />
+              <path d="M 8 406 L 8 416 L 18 416" stroke="#334155" strokeWidth="1" strokeOpacity="0.15" fill="none" />
+              <path d="M 92 406 L 92 416 L 82 416" stroke="#334155" strokeWidth="1" strokeOpacity="0.15" fill="none" />
             </svg>
 
             <div className="text-slate-500 text-xs mb-6 font-mono relative z-10">{'// Heartbeat Learning Flow'}</div>

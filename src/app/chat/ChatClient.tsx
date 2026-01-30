@@ -251,6 +251,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const lastStreamLengthRef = useRef(0);
   const vapidPublicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || '';
   const [sessionCopied, setSessionCopied] = useState(false);
+  const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [showThinkingText, setShowThinkingText] = useState(true);
@@ -284,6 +285,11 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     abortChat,
     setSessionVerbose,
   } = useGateway({ userId });
+
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.sessionKey === currentSessionKey),
+    [sessions, currentSessionKey]
+  );
 
   const lastThinking = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -396,6 +402,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     const content = text.trim().toLowerCase();
     if (!content) return false;
     const noisePatterns = [
+      /^no_reply$/i,
       /\(no new output\)/i,
       /process still running/i,
       /command still running/i,
@@ -410,12 +417,32 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
   const visibleMessages = useMemo(() => {
     const sessionMessages = messages.filter((message) => message.sessionKey === currentSessionKey);
-    if (showDetails) return sessionMessages;
-    return sessionMessages.filter((message) => {
+    const shouldHideStandaloneNo = (message: (typeof sessionMessages)[number], index: number) => {
+      if (message.role !== 'assistant' || typeof message.content !== 'string') return false;
+      const trimmed = message.content.trim();
+      if (trimmed !== 'NO') return false;
+      const next = sessionMessages[index + 1];
+      if (next && next.role === 'assistant') return true;
+      const prev = sessionMessages[index - 1];
+      if (
+        prev &&
+        prev.role === 'user' &&
+        typeof prev.content === 'string' &&
+        prev.content.trim().startsWith(PROFILE_SYNC_PREFIX)
+      ) {
+        return true;
+      }
+      return false;
+    };
+    if (showDetails) {
+      return sessionMessages.filter((message, index) => !shouldHideStandaloneNo(message, index));
+    }
+    return sessionMessages.filter((message, index) => {
       if (message.role === 'user' && typeof message.content === 'string') {
         if (message.content.trim().startsWith(PROFILE_SYNC_PREFIX)) return false;
       }
       if (message.role !== 'assistant') return true;
+      if (shouldHideStandaloneNo(message, index)) return false;
       if (message.isToolResult) return false;
       if (message.attachments && message.attachments.length > 0) return true;
       const blocks = message.blocks || [];
@@ -901,6 +928,43 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     }
   }, [buildSessionText]);
 
+  const sessionIdToCopy = currentSession?.sessionId || currentSessionKey || '';
+  const canCopySession = Boolean(visibleMessages.length || displayStreamingContent);
+  const canCopySessionId = isClient && Boolean(sessionIdToCopy);
+  const canCopyAnything = isClient && (canCopySession || canCopySessionId);
+
+  const handleCopySessionId = useCallback(async () => {
+    if (!sessionIdToCopy) return;
+    try {
+      await navigator.clipboard.writeText(sessionIdToCopy);
+      setSessionCopied(true);
+      window.setTimeout(() => setSessionCopied(false), 1500);
+    } catch (err) {
+      console.error('Failed to copy session id:', err);
+    }
+  }, [sessionIdToCopy]);
+
+  const sessionMenuRef = useRef<HTMLDivElement>(null);
+  const sessionMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!sessionMenuOpen) return;
+    const dismiss = (event: MouseEvent) => {
+      if (sessionMenuRef.current?.contains(event.target as Node)) return;
+      if (sessionMenuButtonRef.current?.contains(event.target as Node)) return;
+      setSessionMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSessionMenuOpen(false);
+    };
+    document.addEventListener('mousedown', dismiss);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', dismiss);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [sessionMenuOpen]);
+
   const isLoadingHistory = loadingHistoryKey === currentSessionKey && visibleMessages.length === 0;
   const isEmpty = ((visibleMessages.length === 0 && !displayStreamingContent) || isDraftSession) && !isLoadingHistory;
 
@@ -1030,14 +1094,60 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                   </AnimatePresence>
                 </motion.button>
               )}
-              <button
-                onClick={handleCopySession}
-                disabled={!visibleMessages.length && !displayStreamingContent}
-                className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Copy entire session"
-              >
-                {sessionCopied ? <Check size={16} /> : <Copy size={16} />}
-              </button>
+              <div className="relative">
+                <button
+                  ref={sessionMenuButtonRef}
+                  onClick={() => {
+                    if (!canCopyAnything) return;
+                    setSessionMenuOpen((prev) => !prev);
+                  }}
+                  disabled={!canCopyAnything}
+                  aria-haspopup="menu"
+                  aria-expanded={sessionMenuOpen}
+                  className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-full border border-[var(--fc-border-gray)] bg-white hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Copy options"
+                >
+                  {sessionCopied ? <Check size={16} /> : <Copy size={16} />}
+                </button>
+                {sessionMenuOpen && (
+                  <div
+                    ref={sessionMenuRef}
+                    role="menu"
+                    className="absolute right-0 mt-2 min-w-[180px] py-1 bg-white rounded-lg shadow-lg border border-[var(--fc-border-gray)] z-30"
+                  >
+                    <button
+                      role="menuitem"
+                      disabled={!canCopySession}
+                      onClick={() => {
+                        handleCopySession();
+                        setSessionMenuOpen(false);
+                      }}
+                      className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 ${
+                        canCopySession
+                          ? 'text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)]'
+                          : 'text-[var(--fc-light-gray)] cursor-not-allowed'
+                      }`}
+                    >
+                      <Copy size={12} /> Copy Session
+                    </button>
+                    <button
+                      role="menuitem"
+                      disabled={!canCopySessionId}
+                      onClick={() => {
+                        handleCopySessionId();
+                        setSessionMenuOpen(false);
+                      }}
+                      className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 ${
+                        canCopySessionId
+                          ? 'text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)]'
+                          : 'text-[var(--fc-light-gray)] cursor-not-allowed'
+                      }`}
+                    >
+                      <FileText size={12} /> Copy Session ID
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

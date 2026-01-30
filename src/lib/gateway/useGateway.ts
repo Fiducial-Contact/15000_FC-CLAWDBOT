@@ -41,7 +41,44 @@ interface UseGatewayOptions {
   userId: string;
 }
 
+type SessionTitleSource = 'auto' | 'user' | 'remote';
+
+type SessionTitleCacheEntry = {
+  title: string;
+  source: SessionTitleSource;
+  updatedAtMs: number;
+};
+
+type PendingTitleUpdate = {
+  title: string;
+  source: SessionTitleSource;
+  queuedAtMs: number;
+};
+
+type SessionListEntry = SessionEntry & {
+  resetAt?: string;
+};
+
 const SESSION_TITLE_CACHE_KEY = 'fc-session-titles';
+const DEFAULT_MAIN_TITLE = 'Main Chat';
+const DEFAULT_NEW_TITLE = 'New Chat';
+const CLIENT_DISPLAY_NAME = 'fc-team-chat';
+const MAX_SESSION_TITLE_LENGTH = 80;
+
+function normalizeTitleCacheEntry(value: unknown): SessionTitleCacheEntry | null {
+  if (typeof value === 'string') {
+    if (value === CLIENT_DISPLAY_NAME) return null;
+    return { title: value, source: 'auto', updatedAtMs: 0 };
+  }
+  if (!value || typeof value !== 'object') return null;
+  const entry = value as Record<string, unknown>;
+  if (typeof entry.title !== 'string' || entry.title.trim().length === 0) return null;
+  if (entry.title === CLIENT_DISPLAY_NAME) return null;
+  const source =
+    entry.source === 'user' || entry.source === 'remote' ? entry.source : 'auto';
+  const updatedAtMs = typeof entry.updatedAtMs === 'number' ? entry.updatedAtMs : 0;
+  return { title: entry.title, source, updatedAtMs };
+}
 
 function normalizeContentBlocks(content: unknown): ChatContentBlock[] {
   if (!content) return [];
@@ -197,6 +234,34 @@ function generateSessionTitle(message: string): string {
   return cleaned.slice(0, 30).trim() + '...';
 }
 
+function normalizeSessionTitleInput(title: string): string | null {
+  const trimmed = title.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return null;
+  if (trimmed.length <= MAX_SESSION_TITLE_LENGTH) return trimmed;
+  return trimmed.slice(0, MAX_SESSION_TITLE_LENGTH).trim();
+}
+
+function formatTitleTimestampSuffix(date = new Date()): string {
+  const year = date.getFullYear().toString();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  const hours = `${date.getHours()}`.padStart(2, '0');
+  const minutes = `${date.getMinutes()}`.padStart(2, '0');
+  const seconds = `${date.getSeconds()}`.padStart(2, '0');
+  return `${year}${month}${day}-${hours}${minutes}${seconds}`;
+}
+
+function appendTitleTimestamp(baseTitle: string, date = new Date()): string {
+  const suffix = formatTitleTimestampSuffix(date);
+  const separator = ' ';
+  const maxBaseLength = MAX_SESSION_TITLE_LENGTH - (separator.length + suffix.length);
+  const trimmedBase =
+    maxBaseLength > 0 ? baseTitle.slice(0, maxBaseLength).trimEnd() : baseTitle.slice(0, MAX_SESSION_TITLE_LENGTH);
+  const combined = `${trimmedBase}${separator}${suffix}`.trim();
+  if (combined.length <= MAX_SESSION_TITLE_LENGTH) return combined;
+  return combined.slice(0, MAX_SESSION_TITLE_LENGTH).trimEnd();
+}
+
 function buildFileUrlText(entries: Array<{ name: string; url: string }>) {
   if (entries.length === 0) return '';
   return entries.map((entry) => `File: ${entry.name}\nURL: ${entry.url}`).join('\n');
@@ -293,7 +358,7 @@ function isUserWebchatSession(sessionKey: string | undefined, userId: string): b
 
 export function useGateway({ userId }: UseGatewayOptions) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sessions, setSessions] = useState<SessionEntry[]>([]);
+  const [sessions, setSessions] = useState<SessionListEntry[]>([]);
   const [currentSessionKey, setCurrentSessionKey] = useState<string>(() => {
     if (!userId) return '';
     try {
@@ -329,17 +394,36 @@ export function useGateway({ userId }: UseGatewayOptions) {
   const isDraftSessionRef = useRef(isDraftSession);
   const skipHistoryLoadRef = useRef(false);
   const toolRemovalTimersRef = useRef<Map<string, number>>(new Map());
-  const sessionTitleCacheRef = useRef<Record<string, string>>({});
+  const sessionTitleCacheRef = useRef<Record<string, SessionTitleCacheEntry | undefined>>({});
+  const pendingTitleUpdatesRef = useRef<Map<string, PendingTitleUpdate>>(new Map());
+  const sessionIdByKeyRef = useRef<Map<string, string>>(new Map());
+  const suppressedRemoteTitlesRef = useRef<Set<string>>(new Set());
+  const resetAtByKeyRef = useRef<Map<string, number>>(new Map());
   const historyRefreshTimeoutRef = useRef<number | null>(null);
+  const errorTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (errorTimeoutRef.current !== null) {
+        window.clearTimeout(errorTimeoutRef.current);
+        errorTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!userId) return;
     try {
       const raw = localStorage.getItem(`${SESSION_TITLE_CACHE_KEY}:${userId}`);
       if (raw) {
-        const parsed = JSON.parse(raw) as Record<string, string>;
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
         if (parsed && typeof parsed === 'object') {
-          sessionTitleCacheRef.current = parsed;
+          const normalized: Record<string, SessionTitleCacheEntry> = {};
+          for (const [key, value] of Object.entries(parsed)) {
+            const entry = normalizeTitleCacheEntry(value);
+            if (entry) normalized[key] = entry;
+          }
+          sessionTitleCacheRef.current = normalized;
         }
       }
     } catch {
@@ -347,12 +431,36 @@ export function useGateway({ userId }: UseGatewayOptions) {
     }
   }, [userId]);
 
-  const persistSessionTitle = useCallback((sessionKey: string, title: string) => {
+  const persistSessionTitle = useCallback(
+    (sessionKey: string, title: string, source: SessionTitleSource) => {
+      if (!userId) return;
+      if (title === CLIENT_DISPLAY_NAME) return;
+      sessionTitleCacheRef.current = {
+        ...sessionTitleCacheRef.current,
+        [sessionKey]: {
+          title,
+          source,
+          updatedAtMs: Date.now(),
+        },
+      };
+      try {
+        localStorage.setItem(
+          `${SESSION_TITLE_CACHE_KEY}:${userId}`,
+          JSON.stringify(sessionTitleCacheRef.current)
+        );
+      } catch {
+        // ignore localStorage errors
+      }
+    },
+    [userId]
+  );
+
+  const removeSessionTitleCache = useCallback((sessionKey: string) => {
     if (!userId) return;
-    sessionTitleCacheRef.current = {
-      ...sessionTitleCacheRef.current,
-      [sessionKey]: title,
-    };
+    if (!sessionTitleCacheRef.current[sessionKey]) return;
+    const next = { ...sessionTitleCacheRef.current };
+    delete next[sessionKey];
+    sessionTitleCacheRef.current = next;
     try {
       localStorage.setItem(
         `${SESSION_TITLE_CACHE_KEY}:${userId}`,
@@ -362,6 +470,51 @@ export function useGateway({ userId }: UseGatewayOptions) {
       // ignore localStorage errors
     }
   }, [userId]);
+
+  const pruneSessionTitleCache = useCallback((keepKeys: Set<string>) => {
+    if (!userId) return;
+    let changed = false;
+    const next: Record<string, SessionTitleCacheEntry> = {};
+    for (const [key, entry] of Object.entries(sessionTitleCacheRef.current)) {
+      if (keepKeys.has(key) && entry) {
+        next[key] = entry;
+      } else {
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    sessionTitleCacheRef.current = next;
+    try {
+      localStorage.setItem(
+        `${SESSION_TITLE_CACHE_KEY}:${userId}`,
+        JSON.stringify(sessionTitleCacheRef.current)
+      );
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [userId]);
+
+  const queuePendingTitleUpdate = useCallback(
+    (sessionKey: string, title: string, source: SessionTitleSource) => {
+      pendingTitleUpdatesRef.current.set(sessionKey, {
+        title,
+        source,
+        queuedAtMs: Date.now(),
+      });
+    },
+    []
+  );
+
+  const pushTransientError = useCallback((message: string, timeoutMs = 6000) => {
+    setError(message);
+    if (errorTimeoutRef.current !== null) {
+      window.clearTimeout(errorTimeoutRef.current);
+    }
+    errorTimeoutRef.current = window.setTimeout(() => {
+      setError((current) => (current === message ? null : current));
+      errorTimeoutRef.current = null;
+    }, timeoutMs);
+  }, []);
 
   const setSessionVerbose = useCallback(async (sessionKey: string, enabled: boolean) => {
     if (!clientRef.current || !clientRef.current.isConnected()) {
@@ -388,8 +541,8 @@ export function useGateway({ userId }: UseGatewayOptions) {
           {
             sessionKey: key,
             sessionId: userId,
-            displayName: 'Main Chat',
-            label: 'Main Chat',
+            displayName: DEFAULT_MAIN_TITLE,
+            label: DEFAULT_MAIN_TITLE,
             updatedAt: new Date().toISOString(),
           },
           ...prev,
@@ -450,33 +603,81 @@ export function useGateway({ userId }: UseGatewayOptions) {
         pendingSessionsRef.current.delete(key);
       }
 
-      const normalizedSessions: SessionEntry[] = gatewaySessions.map((session) => {
-        const cachedTitle = sessionTitleCacheRef.current[session.sessionKey];
-        const remoteTitle = session.label || session.displayName || session.origin?.label || '';
-        const shouldPreferCache = Boolean(
+      const normalizedSessions: SessionListEntry[] = gatewaySessions.map((session) => {
+        const cachedEntry = sessionTitleCacheRef.current[session.sessionKey];
+        let cachedTitle = cachedEntry?.title;
+        if (cachedTitle === CLIENT_DISPLAY_NAME) {
+          cachedTitle = undefined;
+          removeSessionTitleCache(session.sessionKey);
+        }
+        const remoteLabel = typeof session.label === 'string' ? session.label.trim() : '';
+        const remoteDisplayName =
+          typeof session.displayName === 'string' ? session.displayName.trim() : '';
+        const originLabel =
+          typeof session.origin?.label === 'string' ? session.origin.label.trim() : '';
+        const rawRemoteTitle = remoteLabel || remoteDisplayName || originLabel || '';
+        const remoteTitle = rawRemoteTitle === CLIENT_DISPLAY_NAME ? '' : rawRemoteTitle;
+        const hasRemoteTitle = Boolean(remoteTitle);
+
+        const previousSessionId = sessionIdByKeyRef.current.get(session.sessionKey);
+        const currentSessionId = session.sessionId;
+        const sessionIdChanged =
+          Boolean(previousSessionId && currentSessionId && previousSessionId !== currentSessionId);
+        if (currentSessionId) {
+          sessionIdByKeyRef.current.set(session.sessionKey, currentSessionId);
+        }
+
+        if (
+          sessionIdChanged &&
+          cachedEntry?.source === 'auto' &&
           cachedTitle &&
-            (!remoteTitle ||
-              remoteTitle === 'fc-team-chat' ||
-              remoteTitle === 'Main Chat' ||
-              remoteTitle === 'New Chat')
-        );
-        const displayName = shouldPreferCache ? cachedTitle : remoteTitle;
+          remoteTitle === cachedTitle
+        ) {
+          suppressedRemoteTitlesRef.current.add(session.sessionKey);
+          resetAtByKeyRef.current.set(session.sessionKey, Date.now());
+          removeSessionTitleCache(session.sessionKey);
+        }
+
+        const pendingUpdate = pendingTitleUpdatesRef.current.get(session.sessionKey);
+        if (pendingUpdate && remoteTitle && remoteTitle === pendingUpdate.title) {
+          pendingTitleUpdatesRef.current.delete(session.sessionKey);
+        }
+
+        if (cachedTitle && remoteTitle && remoteTitle !== cachedTitle) {
+          suppressedRemoteTitlesRef.current.delete(session.sessionKey);
+          resetAtByKeyRef.current.delete(session.sessionKey);
+        }
+
+        const suppressRemote = suppressedRemoteTitlesRef.current.has(session.sessionKey);
+        const effectiveRemoteTitle = suppressRemote ? '' : remoteTitle;
+
+        if (hasRemoteTitle && !pendingTitleUpdatesRef.current.has(session.sessionKey) && !suppressRemote) {
+          if (!cachedEntry || cachedEntry.title !== remoteTitle || cachedEntry.source !== 'remote') {
+            persistSessionTitle(session.sessionKey, remoteTitle, 'remote');
+          }
+        }
+
+        const hasPendingTitle = pendingTitleUpdatesRef.current.has(session.sessionKey);
+        const shouldPreferCache = Boolean(cachedTitle && (!effectiveRemoteTitle || hasPendingTitle));
+        const displayName = shouldPreferCache ? cachedTitle : effectiveRemoteTitle;
+        const resetAt = resetAtByKeyRef.current.get(session.sessionKey);
         return {
           ...session,
           displayName,
+          resetAt: resetAt ? new Date(resetAt).toISOString() : undefined,
         };
       });
 
       const defaultKey = buildSessionKey(buildPeerId(userId));
       const hasDefaultSession = normalizedSessions.some((s) => s.sessionKey === defaultKey);
-      const nextSessions: SessionEntry[] = hasDefaultSession
+      const nextSessions: SessionListEntry[] = hasDefaultSession
         ? [...normalizedSessions]
         : [
             {
               sessionKey: defaultKey,
               sessionId: userId,
-              displayName: 'Main Chat',
-              label: 'Main Chat',
+              displayName: DEFAULT_MAIN_TITLE,
+              label: DEFAULT_MAIN_TITLE,
               updatedAt: new Date().toISOString(),
             },
             ...normalizedSessions,
@@ -496,6 +697,21 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
       setSessions(nextSessions);
 
+      const keepKeys = new Set(nextSessions.map((session) => session.sessionKey));
+      for (const key of pendingTitleUpdatesRef.current.keys()) {
+        keepKeys.add(key);
+      }
+      pruneSessionTitleCache(keepKeys);
+      for (const key of suppressedRemoteTitlesRef.current) {
+        if (!keepKeys.has(key)) suppressedRemoteTitlesRef.current.delete(key);
+      }
+      for (const key of resetAtByKeyRef.current.keys()) {
+        if (!keepKeys.has(key)) resetAtByKeyRef.current.delete(key);
+      }
+      for (const key of sessionIdByKeyRef.current.keys()) {
+        if (!keepKeys.has(key)) sessionIdByKeyRef.current.delete(key);
+      }
+
       const activeKey = currentSessionKeyRef.current;
       const hasActive = activeKey
         ? nextSessions.some((session) => session.sessionKey === activeKey)
@@ -508,62 +724,250 @@ export function useGateway({ userId }: UseGatewayOptions) {
         currentSessionKeyRef.current = fallbackKey;
       }
     },
-    [userId]
+    [persistSessionTitle, pruneSessionTitleCache, removeSessionTitleCache, userId]
   );
 
+  const refreshSessionsFromGateway = useCallback(async () => {
+    if (!clientRef.current || !clientRef.current.isConnected()) {
+      return;
+    }
+    try {
+      const sessionList = await clientRef.current.listSessions();
+      applyGatewaySessions(sessionList);
+    } catch (err) {
+      console.error('Failed to refresh sessions:', err);
+    }
+  }, [applyGatewaySessions]);
+
+  const patchSessionTitle = useCallback(async (sessionKey: string, title: string) => {
+    if (!clientRef.current || !clientRef.current.isConnected()) {
+      return 'disconnected';
+    }
+
+    try {
+      await clientRef.current.patchSession(sessionKey, { label: title });
+      return 'patched';
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      const lowered = message.toLowerCase();
+      if (lowered.includes('missing scope')) {
+        canPatchSessionsRef.current = false;
+        return 'missing_scope';
+      }
+      if (lowered.includes('label already in use')) {
+        return 'duplicate';
+      }
+      if (lowered.includes('unexpected property') && lowered.includes('label')) {
+        try {
+          await clientRef.current.patchSession(sessionKey, { displayName: title });
+          return 'patched';
+        } catch (fallbackErr) {
+          console.error('Failed to update session title:', fallbackErr);
+          return 'error';
+        }
+      }
+      console.error('Failed to update session title:', err);
+      return 'error';
+    }
+  }, []);
+
   const updateSessionTitle = useCallback(
-    async (sessionKey: string, title: string) => {
+    async (sessionKey: string, title: string, source: SessionTitleSource = 'auto') => {
       if (!sessionKey) {
+        console.warn('Missing session key for title update.');
         return;
       }
-      persistSessionTitle(sessionKey, title);
+
+      const normalizedTitle = normalizeSessionTitleInput(title);
+      if (!normalizedTitle) {
+        pushTransientError('Session title cannot be empty.');
+        return;
+      }
+
+      suppressedRemoteTitlesRef.current.delete(sessionKey);
+      resetAtByKeyRef.current.delete(sessionKey);
+      persistSessionTitle(sessionKey, normalizedTitle, source);
+
       setSessions((prev) =>
         prev.map((session) =>
           session.sessionKey === sessionKey
-            ? { ...session, displayName: title, label: title, updatedAt: new Date().toISOString() }
+            ? {
+                ...session,
+                displayName: normalizedTitle,
+                label: normalizedTitle,
+                updatedAt: new Date().toISOString(),
+              }
             : session
         )
       );
 
       if (!clientRef.current || !clientRef.current.isConnected()) {
+        queuePendingTitleUpdate(sessionKey, normalizedTitle, source);
+        console.warn('Gateway not connected; queued title update.');
         return;
       }
 
       if (!canPatchSessionsRef.current) {
+        queuePendingTitleUpdate(sessionKey, normalizedTitle, source);
+        pushTransientError('Missing permission to update session titles.');
         return;
       }
 
-      let patched = false;
-      try {
-        await clientRef.current.patchSession(sessionKey, { label: title });
-        patched = true;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : '';
-        if (message.toLowerCase().includes('missing scope')) {
-          canPatchSessionsRef.current = false;
-          return;
-        }
-        if (message.toLowerCase().includes('label already in use')) {
-          return;
-        }
-        if (message.toLowerCase().includes('unexpected property') && message.includes('label')) {
-          try {
-            await clientRef.current.patchSession(sessionKey, { displayName: title });
-            patched = true;
-          } catch (fallbackErr) {
-            console.error('Failed to update session title:', fallbackErr);
-          }
-        } else {
-          console.error('Failed to update session title:', err);
-        }
+      const result = await patchSessionTitle(sessionKey, normalizedTitle);
+      if (result === 'patched') {
+        pendingTitleUpdatesRef.current.delete(sessionKey);
+        await refreshSessionsFromGateway();
+        return;
       }
 
-      if (patched) {
-        const sessionList = await clientRef.current.listSessions();
-        applyGatewaySessions(sessionList);
+      if (result === 'disconnected') {
+        queuePendingTitleUpdate(sessionKey, normalizedTitle, source);
+        return;
+      }
+
+      if (result === 'missing_scope') {
+        queuePendingTitleUpdate(sessionKey, normalizedTitle, source);
+        pushTransientError('Missing permission to update session titles.');
+        return;
+      }
+
+      if (result === 'duplicate') {
+        pendingTitleUpdatesRef.current.delete(sessionKey);
+        const dedupedTitle = appendTitleTimestamp(normalizedTitle);
+        if (dedupedTitle === normalizedTitle) {
+          pushTransientError('Session title already in use.');
+          await refreshSessionsFromGateway();
+          return;
+        }
+        persistSessionTitle(sessionKey, dedupedTitle, source);
+        setSessions((prev) =>
+          prev.map((session) =>
+            session.sessionKey === sessionKey
+              ? {
+                  ...session,
+                  displayName: dedupedTitle,
+                  label: dedupedTitle,
+                  updatedAt: new Date().toISOString(),
+                }
+              : session
+          )
+        );
+        const retryResult = await patchSessionTitle(sessionKey, dedupedTitle);
+        if (retryResult === 'patched') {
+          pendingTitleUpdatesRef.current.delete(sessionKey);
+          pushTransientError('Session title already in use. Added timestamp.');
+          await refreshSessionsFromGateway();
+          return;
+        }
+        if (retryResult === 'missing_scope') {
+          queuePendingTitleUpdate(sessionKey, dedupedTitle, source);
+          pushTransientError('Missing permission to update session titles.');
+          return;
+        }
+        if (retryResult === 'disconnected') {
+          queuePendingTitleUpdate(sessionKey, dedupedTitle, source);
+          return;
+        }
+        queuePendingTitleUpdate(sessionKey, dedupedTitle, source);
+        pushTransientError('Failed to update session title.');
+        return;
+      }
+
+      if (result === 'error') {
+        queuePendingTitleUpdate(sessionKey, normalizedTitle, source);
+        pushTransientError('Failed to update session title.');
       }
     },
-    [applyGatewaySessions, persistSessionTitle]
+    [
+      patchSessionTitle,
+      persistSessionTitle,
+      pushTransientError,
+      queuePendingTitleUpdate,
+      refreshSessionsFromGateway,
+    ]
+  );
+
+  const flushPendingTitleUpdates = useCallback(async () => {
+    if (!clientRef.current || !clientRef.current.isConnected()) {
+      return;
+    }
+    if (!canPatchSessionsRef.current) {
+      return;
+    }
+    const pendingEntries = Array.from(pendingTitleUpdatesRef.current.entries());
+    if (pendingEntries.length === 0) return;
+
+    let patchedAny = false;
+    for (const [sessionKey, pending] of pendingEntries) {
+      const result = await patchSessionTitle(sessionKey, pending.title);
+      if (result === 'patched') {
+        pendingTitleUpdatesRef.current.delete(sessionKey);
+        persistSessionTitle(sessionKey, pending.title, pending.source);
+        patchedAny = true;
+        continue;
+      }
+      if (result === 'disconnected') {
+        break;
+      }
+      if (result === 'duplicate') {
+        pendingTitleUpdatesRef.current.delete(sessionKey);
+        const dedupedTitle = appendTitleTimestamp(pending.title);
+        if (dedupedTitle === pending.title) {
+          pushTransientError('Session title already in use.');
+          continue;
+        }
+        const retryResult = await patchSessionTitle(sessionKey, dedupedTitle);
+        if (retryResult === 'patched') {
+          persistSessionTitle(sessionKey, dedupedTitle, pending.source);
+          pushTransientError('Session title already in use. Added timestamp.');
+          patchedAny = true;
+        } else if (retryResult === 'missing_scope') {
+          queuePendingTitleUpdate(sessionKey, dedupedTitle, pending.source);
+          pushTransientError('Missing permission to update session titles.');
+          break;
+        } else if (retryResult === 'disconnected') {
+          queuePendingTitleUpdate(sessionKey, dedupedTitle, pending.source);
+          break;
+        } else {
+          queuePendingTitleUpdate(sessionKey, dedupedTitle, pending.source);
+          pushTransientError('Failed to sync session titles.');
+        }
+        continue;
+      }
+      if (result === 'missing_scope') {
+        pushTransientError('Missing permission to update session titles.');
+        break;
+      }
+      if (result === 'error') {
+        pushTransientError('Failed to sync session titles.');
+      }
+    }
+
+    if (patchedAny) {
+      await refreshSessionsFromGateway();
+    }
+  }, [
+    patchSessionTitle,
+    persistSessionTitle,
+    pushTransientError,
+    queuePendingTitleUpdate,
+    refreshSessionsFromGateway,
+  ]);
+
+  const ensureMainSessionLabel = useCallback(
+    async (sessionList: SessionEntry[]) => {
+      if (!userId) return;
+      const mainKey = buildSessionKey(buildPeerId(userId));
+      const mainSession = sessionList.find((session) => session.sessionKey === mainKey);
+      if (!mainSession) return;
+      const hasExplicitLabel =
+        (typeof mainSession.label === 'string' && mainSession.label.trim().length > 0) ||
+        (typeof mainSession.displayName === 'string' && mainSession.displayName.trim().length > 0);
+      if (hasExplicitLabel) return;
+      if (pendingTitleUpdatesRef.current.has(mainKey)) return;
+      await updateSessionTitle(mainKey, DEFAULT_MAIN_TITLE, 'auto');
+    },
+    [updateSessionTitle, userId]
   );
 
   useEffect(() => {
@@ -586,7 +990,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
       new GatewayClient({
         url,
         token,
-        clientName: 'fc-team-chat',
+        clientName: CLIENT_DISPLAY_NAME,
         clientVersion: '1.0.0',
         mode: 'webchat',
         userId,
@@ -714,9 +1118,12 @@ export function useGateway({ userId }: UseGatewayOptions) {
         await client.connect();
         setIsConnected(true);
         setError(null);
+        canPatchSessionsRef.current = true;
 
         const sessionList = await client.listSessions();
         applyGatewaySessions(sessionList);
+        await ensureMainSessionLabel(sessionList);
+        await flushPendingTitleUpdates();
       };
 
       try {
@@ -776,7 +1183,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
         historyRefreshTimeoutRef.current = null;
       }
     };
-  }, [userId, applyGatewaySessions]);
+  }, [userId, applyGatewaySessions, ensureMainSessionLabel, flushPendingTitleUpdates]);
 
   useEffect(() => {
     if (!clientRef.current || !clientRef.current.isConnected() || !currentSessionKey) {
@@ -839,18 +1246,15 @@ export function useGateway({ userId }: UseGatewayOptions) {
           const displayName = sessionEntry?.label || sessionEntry?.displayName;
           const shouldUpdateTitle =
             !!firstUserMsg &&
-            (!displayName || displayName === 'Main Chat' || displayName === 'New Chat');
+            (!displayName || displayName === DEFAULT_MAIN_TITLE || displayName === DEFAULT_NEW_TITLE);
 
-          if (shouldUpdateTitle) {
-            const newTitle = generateSessionTitle(firstUserMsg.content);
-            updateSessionTitle(currentSessionKey, newTitle);
-          }
-        } else {
-          setMessages([]);
+        if (shouldUpdateTitle) {
+          const newTitle = generateSessionTitle(firstUserMsg.content);
+          updateSessionTitle(currentSessionKey, newTitle);
+        }
         }
       } catch (err) {
         console.error('Failed to load history:', err);
-        setMessages([]);
       } finally {
         setLoadingHistoryKey(null);
       }
@@ -867,8 +1271,8 @@ export function useGateway({ userId }: UseGatewayOptions) {
     const newSession: SessionEntry = {
       sessionKey: newSessionKey,
       sessionId: newSessionId,
-      displayName: `New Chat`,
-      label: 'New Chat',
+      displayName: DEFAULT_NEW_TITLE,
+      label: DEFAULT_NEW_TITLE,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1146,6 +1550,11 @@ export function useGateway({ userId }: UseGatewayOptions) {
     try {
       await clientRef.current.deleteSession(sessionKey);
       pendingSessionsRef.current.delete(sessionKey);
+      pendingTitleUpdatesRef.current.delete(sessionKey);
+      suppressedRemoteTitlesRef.current.delete(sessionKey);
+      resetAtByKeyRef.current.delete(sessionKey);
+      sessionIdByKeyRef.current.delete(sessionKey);
+      removeSessionTitleCache(sessionKey);
       setSessions((prev) => prev.filter((s) => s.sessionKey !== sessionKey));
 
       if (sessionKey === currentSessionKey) {
@@ -1164,7 +1573,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
         console.error('Failed to delete session:', err);
       }
     }
-  }, [userId, currentSessionKey, sessions, createNewSession]);
+  }, [userId, currentSessionKey, sessions, createNewSession, removeSessionTitleCache]);
 
   const toggleSidebar = useCallback(() => {
     setIsSidebarOpen((prev) => !prev);
