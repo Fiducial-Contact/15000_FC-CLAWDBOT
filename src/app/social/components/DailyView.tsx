@@ -1,33 +1,46 @@
 'use client';
 
-import { Calendar, TrendingUp, TrendingDown } from 'lucide-react';
+import { Calendar, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts';
 import type { DailySnapshot } from '@/lib/types/social';
-import { format } from 'date-fns';
 
 interface DailyViewProps {
   snapshots: DailySnapshot[];
   loading: boolean;
 }
 
+function formatChartDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+}
+
+function formatCardDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date);
+}
+
 export function DailyView({ snapshots, loading }: DailyViewProps) {
   if (loading) {
     return (
       <div className="space-y-4">
-        {[...Array(5)].map((_, i) => (
+        <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4 animate-pulse">
+          <div className="h-[200px] bg-[var(--fc-subtle-gray)] rounded" />
+        </div>
+        {[...Array(3)].map((_, i) => (
           <div
             key={i}
-            className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-6 animate-pulse"
+            className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4 animate-pulse"
           >
-            <div className="h-6 bg-[var(--fc-subtle-gray)] rounded w-1/4 mb-4" />
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {[...Array(6)].map((_, j) => (
-                <div key={j}>
-                  <div className="h-3 bg-[var(--fc-subtle-gray)] rounded w-1/2 mb-2" />
-                  <div className="h-5 bg-[var(--fc-subtle-gray)] rounded w-3/4" />
-                </div>
-              ))}
-            </div>
+            <div className="h-5 bg-[var(--fc-subtle-gray)] rounded w-full" />
           </div>
         ))}
       </div>
@@ -48,12 +61,66 @@ export function DailyView({ snapshots, loading }: DailyViewProps) {
     );
   }
 
+  const chartData = [...snapshots]
+    .slice(0, 14)
+    .reverse()
+    .filter((s) => s.karma !== null)
+    .map((s) => ({
+      date: formatChartDate(s.date),
+      karma: s.karma,
+    }));
+
   return (
     <div className="space-y-4">
+      {chartData.length > 1 && (
+        <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
+          <h3 className="text-sm font-bold text-[var(--fc-black)] mb-3">Karma Trend (Last 14 Days)</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--fc-border-gray)" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11, fill: 'var(--fc-body-gray)' }}
+                tickLine={false}
+                axisLine={{ stroke: 'var(--fc-border-gray)' }}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: 'var(--fc-body-gray)' }}
+                tickLine={false}
+                axisLine={{ stroke: 'var(--fc-border-gray)' }}
+                tickFormatter={(v) => v.toLocaleString()}
+              />
+              <Tooltip
+                formatter={(value) => [typeof value === 'number' ? value.toLocaleString() : '—', 'Karma']}
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: '1px solid var(--fc-border-gray)',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="karma"
+                stroke="#cc1f2d"
+                strokeWidth={2}
+                dot={{ fill: '#cc1f2d', strokeWidth: 0, r: 4 }}
+                activeDot={{ r: 6, fill: '#cc1f2d' }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <AnimatePresence mode="popLayout">
         {snapshots.map((snapshot, index) => {
-          const formattedDate = format(new Date(snapshot.date), 'MMMM d, yyyy');
           const deltaPositive = (snapshot.karma_delta ?? 0) >= 0;
+          const deltaDisplay =
+            snapshot.karma_delta !== null
+              ? snapshot.karma_delta > 0
+                ? `+${snapshot.karma_delta.toLocaleString()}`
+                : snapshot.karma_delta.toLocaleString()
+              : null;
 
           return (
             <motion.div
@@ -61,106 +128,55 @@ export function DailyView({ snapshots, loading }: DailyViewProps) {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              transition={{ delay: index * 0.05 }}
-              className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-6"
+              transition={{ delay: index * 0.03 }}
+              className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4"
             >
-              <h3 className="text-lg font-bold text-[var(--fc-black)] mb-4">
-                {formattedDate}
-              </h3>
-
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-                <div>
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)] mb-1">
-                    Karma
-                  </div>
-                  <div className="text-[18px] font-bold text-[var(--fc-black)]">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                <span className="font-bold text-[var(--fc-black)]">
+                  {formatCardDate(snapshot.date)}
+                </span>
+                <span className="text-[var(--fc-border-gray)]">|</span>
+                <span className="text-[var(--fc-body-gray)]">
+                  Karma:{' '}
+                  <span className="font-semibold text-[var(--fc-black)]">
                     {snapshot.karma?.toLocaleString() ?? '—'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)] mb-1">
-                    Rank
-                  </div>
-                  <div className="text-[18px] font-bold text-[var(--fc-black)]">
-                    {snapshot.rank?.toLocaleString() ?? '—'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)] mb-1">
-                    Delta
-                  </div>
-                  <div
-                    className={`text-[18px] font-bold flex items-center gap-1 ${
-                      deltaPositive ? 'text-emerald-600' : 'text-[var(--fc-action-red)]'
-                    }`}
-                  >
-                    {deltaPositive ? (
-                      <TrendingUp className="w-4 h-4" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4" />
-                    )}
-                    {snapshot.karma_delta !== null
-                      ? snapshot.karma_delta > 0
-                        ? `+${snapshot.karma_delta}`
-                        : snapshot.karma_delta
-                      : '—'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)] mb-1">
-                    Followers
-                  </div>
-                  <div className="text-[18px] font-bold text-[var(--fc-black)]">
-                    {snapshot.followers?.toLocaleString() ?? '—'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)] mb-1">
-                    Posts
-                  </div>
-                  <div className="text-[18px] font-bold text-[var(--fc-black)]">
-                    {snapshot.posts_today?.toLocaleString() ?? '—'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)] mb-1">
-                    Comments
-                  </div>
-                  <div className="text-[18px] font-bold text-[var(--fc-black)]">
-                    {snapshot.comments_today?.toLocaleString() ?? '—'}
-                  </div>
-                </div>
+                  </span>
+                  {deltaDisplay && (
+                    <span
+                      className={`ml-1 ${deltaPositive ? 'text-emerald-600' : 'text-[var(--fc-action-red)]'}`}
+                    >
+                      ({deltaDisplay})
+                    </span>
+                  )}
+                </span>
+                <span className="text-[var(--fc-border-gray)]">|</span>
+                <span className="text-[var(--fc-body-gray)]">
+                  Posts:{' '}
+                  <span className="font-semibold text-[var(--fc-black)]">
+                    {snapshot.posts_today ?? '—'}
+                  </span>
+                </span>
+                <span className="text-[var(--fc-border-gray)]">|</span>
+                <span className="text-[var(--fc-body-gray)]">
+                  Comments:{' '}
+                  <span className="font-semibold text-[var(--fc-black)]">
+                    {snapshot.comments_today ?? '—'}
+                  </span>
+                </span>
+                {snapshot.top_post_url && (
+                  <>
+                    <span className="text-[var(--fc-border-gray)]">|</span>
+                    <a
+                      href={snapshot.top_post_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </>
+                )}
               </div>
-
-              {snapshot.top_post_url && (
-                <div className="pt-4 border-t border-[var(--fc-border-gray)]">
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)] mb-2">
-                    Top Post
-                  </div>
-                  <a
-                    href={snapshot.top_post_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    View on Moltbook →
-                  </a>
-                </div>
-              )}
-
-              {snapshot.notes && (
-                <div className="pt-4 border-t border-[var(--fc-border-gray)] mt-4">
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)] mb-2">
-                    Notes
-                  </div>
-                  <p className="text-sm text-[var(--fc-body-gray)]">{snapshot.notes}</p>
-                </div>
-              )}
             </motion.div>
           );
         })}

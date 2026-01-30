@@ -8,7 +8,7 @@ import { Header } from '@/components/Header';
 import { createClient } from '@/lib/supabase/client';
 import { AGENTS } from '@/lib/types/social';
 import type { ActivityEntry, DailySnapshot, AgentMetrics, SocialViewType } from '@/lib/types/social';
-import { fetchFeed, fetchWins, fetchDaily, fetchNetwork, fetchSubmolt, fetchMetrics } from '@/lib/supabase/moltbook';
+import { fetchFeed, fetchWins, fetchDaily, fetchMetrics } from '@/lib/supabase/moltbook';
 import { MetricsBar } from './components/MetricsBar';
 import { TabBar } from './components/TabBar';
 import { FeedView } from './components/FeedView';
@@ -35,6 +35,10 @@ export function SocialClient({ userEmail }: SocialClientProps) {
     followers: 0,
     postsTotal: 0,
     winRate: 0,
+    karmaTrend: [],
+    evaluatedTotal: 0,
+    viralTotal: 0,
+    karmaYesterday: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,23 +56,10 @@ export function SocialClient({ userEmail }: SocialClientProps) {
       if (activeTab === 'daily') {
         const dailyData = await fetchDaily(activeAgent);
         setDailyEntries(dailyData);
+      } else if (activeTab === 'wins') {
+        setEntries(await fetchWins(activeAgent));
       } else {
-        let entriesData: ActivityEntry[] = [];
-        switch (activeTab) {
-          case 'feed':
-            entriesData = await fetchFeed(activeAgent);
-            break;
-          case 'wins':
-            entriesData = await fetchWins(activeAgent);
-            break;
-          case 'network':
-            entriesData = await fetchNetwork(activeAgent);
-            break;
-          case 'submolt':
-            entriesData = await fetchSubmolt(activeAgent);
-            break;
-        }
-        setEntries(entriesData);
+        setEntries(await fetchFeed(activeAgent));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -195,8 +186,6 @@ export function SocialClient({ userEmail }: SocialClientProps) {
             {activeTab === 'feed' && <FeedView entries={entries} loading={loading} />}
             {activeTab === 'wins' && <WinsView entries={entries} loading={loading} />}
             {activeTab === 'daily' && <DailyView snapshots={dailyEntries} loading={loading} />}
-            {activeTab === 'network' && <FeedView entries={entries} loading={loading} />}
-            {activeTab === 'submolt' && <FeedView entries={entries} loading={loading} />}
           </>
         )}
       </div>

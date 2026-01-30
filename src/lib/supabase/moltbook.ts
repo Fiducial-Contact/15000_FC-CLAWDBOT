@@ -120,43 +120,57 @@ export async function fetchSubmolt(
 export async function fetchMetrics(agentId: string): Promise<AgentMetrics> {
   const supabase = createClient();
 
-  const { data: latest } = await supabase
-    .from('moltbook_daily')
-    .select('*')
-    .eq('agent_id', agentId)
-    .order('date', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [snapshotsResult, totalPostsResult, viralResult, evaluatedResult] = await Promise.all([
+    supabase
+      .from('moltbook_daily')
+      .select('karma, rank, followers')
+      .eq('agent_id', agentId)
+      .order('date', { ascending: false })
+      .limit(7),
+    supabase
+      .from('moltbook_activity')
+      .select('*', { count: 'exact', head: true })
+      .eq('agent_id', agentId)
+      .in('type', ['post', 'comment', 'reply']),
+    supabase
+      .from('moltbook_activity')
+      .select('*', { count: 'exact', head: true })
+      .eq('agent_id', agentId)
+      .eq('result', 'viral'),
+    supabase
+      .from('moltbook_activity')
+      .select('*', { count: 'exact', head: true })
+      .eq('agent_id', agentId)
+      .not('result', 'is', null),
+  ]);
 
-  const { count: totalPosts } = await supabase
-    .from('moltbook_activity')
-    .select('*', { count: 'exact', head: true })
-    .eq('agent_id', agentId)
-    .in('type', ['post', 'comment', 'reply']);
+  const snapshots = (snapshotsResult.data ?? []) as { karma: number | null; rank: number | null; followers: number | null }[];
+  const totalPosts = totalPostsResult.count ?? 0;
+  const viralCount = viralResult.count ?? 0;
+  const evaluatedCount = evaluatedResult.count ?? 0;
 
-  const { count: viralCount } = await supabase
-    .from('moltbook_activity')
-    .select('*', { count: 'exact', head: true })
-    .eq('agent_id', agentId)
-    .eq('result', 'viral');
+  const latest = snapshots[0];
+  const yesterday = snapshots[1];
+  const karmaTrend = snapshots
+    .map((s) => s.karma ?? 0)
+    .reverse();
 
-  const { count: evaluatedCount } = await supabase
-    .from('moltbook_activity')
-    .select('*', { count: 'exact', head: true })
-    .eq('agent_id', agentId)
-    .not('result', 'is', null);
-
-  const snapshot = latest as DailySnapshot | null;
-  const winRate = evaluatedCount && evaluatedCount > 0
-    ? Math.round(((viralCount ?? 0) / evaluatedCount) * 100)
+  const winRate = evaluatedCount > 0
+    ? Math.round((viralCount / evaluatedCount) * 100)
     : 0;
 
   return {
-    karma: snapshot?.karma ?? 0,
-    rank: snapshot?.rank ?? 0,
-    karmaDelta: snapshot?.karma_delta ?? 0,
-    followers: snapshot?.followers ?? 0,
-    postsTotal: totalPosts ?? 0,
+    karma: latest?.karma ?? 0,
+    rank: latest?.rank ?? 0,
+    karmaDelta: latest && yesterday
+      ? (latest.karma ?? 0) - (yesterday.karma ?? 0)
+      : 0,
+    followers: latest?.followers ?? 0,
+    postsTotal: totalPosts,
     winRate,
+    karmaTrend,
+    evaluatedTotal: evaluatedCount,
+    viralTotal: viralCount,
+    karmaYesterday: yesterday?.karma ?? 0,
   };
 }

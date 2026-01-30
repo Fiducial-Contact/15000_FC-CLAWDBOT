@@ -1,7 +1,7 @@
 export type ActivityType = 'post' | 'comment' | 'reply' | 'daily' | 'agent';
 export type ResultType = 'viral' | 'engaged' | 'moderate' | 'flat';
 export type InfluenceType = 'local' | 'submolt' | 'cross-submolt' | 'platform';
-export type SocialViewType = 'feed' | 'wins' | 'daily' | 'network' | 'submolt';
+export type SocialViewType = 'feed' | 'wins' | 'daily';
 
 export interface ActivityEntry {
   id: string;
@@ -45,6 +45,10 @@ export interface AgentMetrics {
   followers: number;
   postsTotal: number;
   winRate: number;
+  karmaTrend: number[];
+  evaluatedTotal: number;
+  viralTotal: number;
+  karmaYesterday: number;
 }
 
 export interface AgentConfig {
