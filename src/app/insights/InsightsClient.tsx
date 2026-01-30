@@ -578,6 +578,55 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
         </div>
 
         <div className="grid grid-cols-12 gap-4 mb-6">
+          <div className="col-span-12 bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--fc-border-gray)]/60 flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-[var(--fc-subtle-gray)] text-[var(--fc-dark-gray)]">
+                  <BookOpen size={16} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[12px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+                    Learning Loop (simple)
+                  </span>
+                  <span className="text-[12px] text-[var(--fc-body-gray)]">
+                    Signals are hints (not rules). The nightly learner uses an LLM to synthesize high-confidence, work-safe memory.
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => router.push('/how-it-works')}
+                className="text-[12px] font-semibold text-[var(--fc-body-gray)] hover:text-[var(--fc-black)] flex items-center gap-1.5 flex-shrink-0"
+              >
+                How it works
+                <ExternalLink size={14} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-[11px]">
+                {[
+                  { label: 'WebChat', desc: 'message + feedback' },
+                  { label: 'Signals', desc: 'metadata only' },
+                  { label: 'Nightly Learner', desc: 'LLM synthesis' },
+                  { label: 'Supabase', desc: 'learning_events' },
+                  { label: 'UI', desc: 'Pulse / Insights' },
+                ].map((node, idx) => (
+                  <div key={node.label} className="flex items-center gap-2">
+                    <div className="flex-1 rounded-xl bg-[var(--fc-subtle-gray)]/40 border border-[var(--fc-border-gray)]/50 px-3 py-2.5">
+                      <div className="text-[var(--fc-black)] font-semibold">{node.label}</div>
+                      <div className="text-[10px] text-[var(--fc-body-gray)]">{node.desc}</div>
+                    </div>
+                    {idx < 4 && (
+                      <span className="hidden sm:inline text-[var(--fc-light-gray)]">→</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <div className="col-span-12 lg:col-span-7 lg:row-span-2 bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-[var(--fc-border-gray)]/60 flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">

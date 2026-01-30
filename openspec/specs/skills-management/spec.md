@@ -1,5 +1,9 @@
 # Skills Management Specification
 
+## Purpose
+
+Manage Clawdbot skill lifecycle: retrieve runtime status via Gateway, store metadata in Supabase, and display a unified skills dashboard.
+
 ## Requirements
 
 ### Requirement: Skills Status Retrieval
