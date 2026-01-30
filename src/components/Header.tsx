@@ -3,7 +3,7 @@
 import { memo, useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { LogOut, Sparkles, ChevronDown, KeyRound, Zap, Info, User, BarChart3 } from 'lucide-react';
+import { LogOut, LogIn, Sparkles, ChevronDown, KeyRound, Zap, Info, User, BarChart3, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface HeaderProps {
@@ -11,9 +11,10 @@ interface HeaderProps {
   onLogout?: () => void;
   onChangePassword?: () => void;
   onOpenProfile?: () => void;
+  onLogin?: () => void;
 }
 
-export const Header = memo(function Header({ userName, onLogout, onChangePassword, onOpenProfile }: HeaderProps) {
+export const Header = memo(function Header({ userName, onLogout, onChangePassword, onOpenProfile, onLogin }: HeaderProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -41,14 +42,16 @@ export const Header = memo(function Header({ userName, onLogout, onChangePasswor
     <header className="bg-white/80 backdrop-blur-md border-b border-[var(--fc-border-gray)] px-4 md:px-6 py-3 sticky top-0 z-50">
       <div className="max-w-6xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Image
-            src="/brand/Fiducial-logo-2021_RGB.svg"
-            alt="Fiducial Communications"
-            width={140}
-            height={35}
-            priority
-            className="h-7 w-auto"
-          />
+          <a href="/chat">
+            <Image
+              src="/brand/Fiducial-logo-2021_RGB.svg"
+              alt="Fiducial Communications"
+              width={140}
+              height={35}
+              priority
+              className="h-7 w-auto"
+            />
+          </a>
           <div className="hidden sm:flex items-center gap-2">
             <div className="h-4 w-px bg-[var(--fc-border-gray)]" />
             <div className="flex items-center gap-1.5">
@@ -79,8 +82,25 @@ export const Header = memo(function Header({ userName, onLogout, onChangePasswor
               <BarChart3 size={12} />
               Memory
             </Link>
+            <Link
+              href="/social"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-[var(--fc-body-gray)] hover:text-[var(--fc-dark-gray)] hover:bg-[var(--fc-subtle-gray)] transition-colors"
+            >
+              <Users size={12} />
+              Social
+            </Link>
           </div>
         </div>
+
+        {!userName && onLogin && (
+          <button
+            onClick={onLogin}
+            className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--fc-black)] text-white text-xs font-medium hover:bg-[var(--fc-charcoal)] transition-colors shadow-sm"
+          >
+            <LogIn size={14} />
+            Sign in
+          </button>
+        )}
 
         {userName && (
           <div className="relative" ref={dropdownRef}>

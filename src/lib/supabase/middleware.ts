@@ -42,14 +42,15 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Protected routes - redirect to login if not authenticated
-  if (!user && request.nextUrl.pathname.startsWith('/chat')) {
+  const protectedPaths = ['/social', '/memory', '/skills'];
+  if (!user && protectedPaths.some(p => request.nextUrl.pathname.startsWith(p))) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from login page
-  if (user && request.nextUrl.pathname === '/') {
+  // Redirect all visitors from / to /chat (chat is the main landing page)
+  if (request.nextUrl.pathname === '/') {
     const url = request.nextUrl.clone();
     url.pathname = '/chat';
     return NextResponse.redirect(url);

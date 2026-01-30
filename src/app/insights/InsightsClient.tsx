@@ -13,6 +13,7 @@ import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { createDefaultProfile } from '@/lib/profile';
 import type { LearningEvent, UserProfile } from '@/lib/types/profile';
+import { PixelRoom } from '@/components/PixelRoom';
 
 type SessionTrace = {
   toolCalls: Array<{
@@ -579,52 +580,74 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
 
         <div className="grid grid-cols-12 gap-4 mb-6">
           <div className="col-span-12 bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-[var(--fc-border-gray)]/60 flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-xl bg-[var(--fc-subtle-gray)] text-[var(--fc-dark-gray)]">
-                  <BookOpen size={16} />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[12px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
-                    Learning Loop (simple)
-                  </span>
-                  <span className="text-[12px] text-[var(--fc-body-gray)]">
-                    Signals are hints (not rules). The nightly learner uses an LLM to synthesize high-confidence, work-safe memory.
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => router.push('/how-it-works')}
-                className="text-[12px] font-semibold text-[var(--fc-body-gray)] hover:text-[var(--fc-black)] flex items-center gap-1.5 flex-shrink-0"
-              >
-                How it works
-                <ExternalLink size={14} />
-              </button>
-            </div>
-
-            <div className="p-5">
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-[11px]">
+            {/* Learning Loop - Compact node flow above animation */}
+            <div className="px-4 py-2 border-b border-[var(--fc-border-gray)]/40 bg-gradient-to-r from-[var(--fc-subtle-gray)]/30 via-white to-[var(--fc-subtle-gray)]/30">
+              <div className="flex items-center justify-center gap-1">
                 {[
-                  { label: 'WebChat', desc: 'message + feedback' },
-                  { label: 'Signals', desc: 'metadata only' },
-                  { label: 'Nightly Learner', desc: 'LLM synthesis' },
-                  { label: 'Supabase', desc: 'learning_events' },
-                  { label: 'UI', desc: 'Pulse / Insights' },
+                  { icon: '💬', label: 'Chat', active: true },
+                  { icon: '📡', label: 'Signals', active: signalSummary.counts24h.messages > 0 },
+                  { icon: '🧠', label: 'Learn', active: recentLearning.length > 0 },
+                  { icon: '💾', label: 'Store', active: recentLearning.length > 0 },
+                  { icon: '✨', label: 'UI', active: true },
                 ].map((node, idx) => (
-                  <div key={node.label} className="flex items-center gap-2">
-                    <div className="flex-1 rounded-xl bg-[var(--fc-subtle-gray)]/40 border border-[var(--fc-border-gray)]/50 px-3 py-2.5">
-                      <div className="text-[var(--fc-black)] font-semibold">{node.label}</div>
-                      <div className="text-[10px] text-[var(--fc-body-gray)]">{node.desc}</div>
+                  <div key={node.label} className="flex items-center">
+                    <div className="flex flex-col items-center">
+                      <div 
+                        className={`
+                          relative flex items-center justify-center w-7 h-7 rounded-full 
+                          ${node.active 
+                            ? 'bg-emerald-50 border-2 border-emerald-400' 
+                            : 'bg-gray-50 border border-gray-200'
+                          }
+                          transition-all duration-300
+                        `}
+                      >
+                        <span className="text-[11px]">{node.icon}</span>
+                        {node.active && (
+                          <span className="absolute inset-0 rounded-full animate-ping bg-emerald-400/20" />
+                        )}
+                      </div>
+                      <span className={`text-[9px] mt-0.5 font-medium ${node.active ? 'text-emerald-600' : 'text-gray-400'}`}>
+                        {node.label}
+                      </span>
                     </div>
                     {idx < 4 && (
-                      <span className="hidden sm:inline text-[var(--fc-light-gray)]">→</span>
+                      <div className="relative w-5 h-[2px] mx-0.5 mb-3">
+                        <div className="absolute inset-0 bg-gray-200 rounded-full" />
+                        {node.active && (
+                          <div 
+                            className="absolute inset-0 bg-emerald-400 rounded-full origin-left"
+                            style={{
+                              animation: `flowPulse 2s ease-in-out infinite`,
+                              animationDelay: `${idx * 0.3}s`,
+                            }}
+                          />
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => router.push('/how-it-works')}
+                  className="ml-2 text-[10px] text-[var(--fc-light-gray)] hover:text-[var(--fc-black)] flex items-center gap-0.5"
+                  title="How it works"
+                >
+                  <ExternalLink size={10} />
+                </button>
               </div>
             </div>
+            <style jsx>{`
+              @keyframes flowPulse {
+                0%, 100% { transform: scaleX(0.3); opacity: 0.5; }
+                50% { transform: scaleX(1); opacity: 1; }
+              }
+            `}</style>
+            <PixelRoom
+              learningEvents={recentLearning}
+              signalCount24h={signalSummary.counts24h.messages}
+              isConnected={isConnected}
+            />
           </div>
 
           <div className="col-span-12 lg:col-span-7 lg:row-span-2 bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm overflow-hidden">
@@ -967,6 +990,8 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
           })}
         </div>
       </div>
+
+
 
       <ChangePasswordModal
         isOpen={isPasswordModalOpen}

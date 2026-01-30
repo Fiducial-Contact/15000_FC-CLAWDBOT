@@ -1,0 +1,247 @@
+.pr-wrap {
+  width: 100%;
+  overflow: hidden;
+  background: #2a2018;
+  display: flex;
+  justify-content: center;
+}
+
+.pr-frame {
+  overflow: hidden;
+}
+
+.pr-room {
+  position: relative;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-repeat: no-repeat;
+  overflow: hidden;
+}
+
+/* --- Agent Sprite --- */
+
+.pr-agent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-repeat: no-repeat;
+  z-index: 2;
+  will-change: transform;
+}
+
+.pr-agent.idle {
+  background-position-x: 0;
+}
+
+.pr-agent.walking {
+  animation: pr-walk 0.5s steps(4) infinite;
+}
+
+@keyframes pr-walk {
+  to {
+    background-position-x: -256px;
+  }
+}
+
+.pr-agent.dir-down  { background-position-y: 0; }
+.pr-agent.dir-left  { background-position-y: -64px; }
+.pr-agent.dir-right { background-position-y: -128px; }
+.pr-agent.dir-up    { background-position-y: -192px; }
+
+/* Contextual action animations */
+.pr-agent.typing {
+  animation: pr-type 0.4s steps(4) infinite;
+  background-position-y: 0;
+}
+
+@keyframes pr-type {
+  to {
+    background-position-x: -256px;
+  }
+}
+
+.pr-agent.reading {
+  animation: pr-read 1.2s steps(4) infinite;
+  background-position-y: 0;
+}
+
+@keyframes pr-read {
+  to {
+    background-position-x: -256px;
+  }
+}
+
+.pr-agent.drinking {
+  animation: pr-drink 2s steps(4) infinite;
+  background-position-y: 0;
+}
+
+@keyframes pr-drink {
+  to {
+    background-position-x: -256px;
+  }
+}
+
+.pr-agent.lying {
+  animation: pr-breathe 2s steps(2) infinite;
+  background-position-y: 0;
+}
+
+@keyframes pr-breathe {
+  50% {
+    background-position-x: -128px;
+  }
+}
+
+.pr-agent.eating {
+  animation: pr-eat 0.6s steps(4) infinite;
+  background-position-y: 0;
+}
+
+@keyframes pr-eat {
+  to {
+    background-position-x: -256px;
+  }
+}
+
+/* --- Status Bubbles --- */
+
+.pr-bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 6px;
+  background: white;
+  border: 2px solid #d1d5db;
+  border-radius: 10px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 160px;
+  animation: pr-bubble-in 300ms ease-out;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.pr-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #d1d5db;
+}
+
+.pr-bubble-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.pr-bubble-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes pr-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Think bubble */
+.pr-bubble-think {
+  border-color: #94a3b8;
+}
+
+.pr-bubble-think::after {
+  border-top-color: #94a3b8;
+}
+
+/* Action bubble - contextual behaviors */
+.pr-bubble-action {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+
+.pr-bubble-action::after {
+  border-top-color: #60a5fa;
+}
+
+/* Eureka bubble */
+.pr-bubble-eureka {
+  border-color: #fbbf24;
+  background: #fffbeb;
+  animation: pr-bubble-in 300ms ease-out, pr-glow 1.5s 300ms ease-in-out infinite alternate;
+}
+
+.pr-bubble-eureka::after {
+  border-top-color: #fbbf24;
+}
+
+@keyframes pr-glow {
+  from {
+    box-shadow: 0 0 4px rgba(251, 191, 36, 0.3);
+  }
+  to {
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+  }
+}
+
+/* Sleep bubble */
+.pr-bubble-sleep {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+  animation: pr-bubble-in 300ms ease-out, pr-float 2s 300ms ease-in-out infinite;
+}
+
+.pr-bubble-sleep::after {
+  border-top-color: #94a3b8;
+}
+
+@keyframes pr-float {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-4px);
+  }
+}
+
+/* --- Dim overlay for disconnected/sleep state --- */
+
+.pr-dim-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* --- Reduced motion --- */
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-agent {
+    animation: none !important;
+    transition: none !important;
+  }
+  .pr-bubble,
+  .pr-bubble-eureka,
+  .pr-bubble-sleep {
+    animation: none !important;
+  }
+}

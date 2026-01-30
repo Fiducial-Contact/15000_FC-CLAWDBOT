@@ -32,6 +32,7 @@ import { AgentInsightPanel } from '@/components/AgentInsightPanel';
 
 import { CapabilityCard } from '@/components/CapabilityCard';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
+import { LoginModal } from '@/components/LoginModal';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { ToolStream } from '@/components/ToolStream';
 import { AnimatedText } from '@/components/AnimatedText';
@@ -268,6 +269,7 @@ function buildProfileSyncMessage(params: {
 }
 
 export function ChatClient({ userEmail, userId }: ChatClientProps) {
+  const isGuest = !userId;
   const router = useRouter();
   const supabase = createClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -288,6 +290,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   const {
     messages,
@@ -984,6 +987,11 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     prevConnectedRef.current = isConnected;
   }, [isConnected, captureGatewayHealth]);
 
+  const handleAbortWithSignal = useCallback(() => {
+    captureGatewayHealth('stream_aborted', { reason: 'user_abort' });
+    abortChat();
+  }, [captureGatewayHealth, abortChat]);
+
   const buildSessionText = useCallback(() => {
     const lines: string[] = [];
     for (const message of visibleMessages) {
@@ -1111,10 +1119,11 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-[var(--fc-off-white)] to-white">
       <Header
-        userName={userEmail}
-        onLogout={handleLogout}
-        onChangePassword={() => setIsPasswordModalOpen(true)}
-        onOpenProfile={handleOpenProfile}
+        userName={isGuest ? undefined : userEmail}
+        onLogout={isGuest ? undefined : handleLogout}
+        onChangePassword={isGuest ? undefined : () => setIsPasswordModalOpen(true)}
+        onOpenProfile={isGuest ? undefined : handleOpenProfile}
+        onLogin={isGuest ? () => setIsLoginModalOpen(true) : undefined}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -1454,6 +1463,11 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
           {isReplaying ? null : (
             <ChatInput
               onSend={async (message: string, attachments: ChatAttachmentInput[]) => {
+                if (isGuest) {
+                  setIsLoginModalOpen(true);
+                  return;
+                }
+
                 const hasProfileData =
                   Boolean(profile?.name?.trim()) ||
                   Boolean(profile?.role?.trim()) ||
@@ -1473,8 +1487,8 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                 captureSignalMessage(message);
                 sendMessage({ text: message, attachments });
               }}
-              onAbort={abortChat}
-              disabled={isLoading || !isConnected}
+              onAbort={handleAbortWithSignal}
+              disabled={isLoading || (!isGuest && !isConnected)}
               isLoading={isLoading}
               prefillValue={inputPrefill}
               onPrefillConsumed={() => setInputPrefill('')}
@@ -1500,6 +1514,15 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
           </AnimatePresence>
         </main>
       </div>
+
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsLoginModalOpen(false);
+          router.refresh();
+        }}
+      />
 
       <ChangePasswordModal
         isOpen={isPasswordModalOpen}
