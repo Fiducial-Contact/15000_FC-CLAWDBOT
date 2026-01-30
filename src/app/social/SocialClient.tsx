@@ -9,7 +9,8 @@ import { LoginModal } from '@/components/LoginModal';
 import { createClient } from '@/lib/supabase/client';
 import { AGENTS } from '@/lib/types/social';
 import type { ActivityEntry, DailySnapshot, AgentMetrics, SocialViewType } from '@/lib/types/social';
-import { fetchFeed, fetchWins, fetchDaily, fetchMetrics } from '@/lib/supabase/moltbook';
+import { fetchFeed, fetchWins, fetchDaily, fetchMetrics, fetchFilterCounts } from '@/lib/supabase/moltbook';
+import type { FeedFilterCounts } from '@/lib/supabase/moltbook';
 import { MetricsBar } from './components/MetricsBar';
 import { TabBar } from './components/TabBar';
 import { FeedView } from './components/FeedView';
@@ -47,6 +48,9 @@ export function SocialClient({ userEmail, userId }: SocialClientProps) {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showAgentDropdown, setShowAgentDropdown] = useState(false);
+  const [feedFilter, setFeedFilter] = useState<'all' | 'post' | 'comment' | 'reply' | 'viral'>('all');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [filterCounts, setFilterCounts] = useState<FeedFilterCounts | undefined>(undefined);
 
   const loadData = useCallback(async () => {
     try {
@@ -62,7 +66,13 @@ export function SocialClient({ userEmail, userId }: SocialClientProps) {
       } else if (activeTab === 'wins') {
         setEntries(await fetchWins(activeAgent));
       } else {
-        setEntries(await fetchFeed(activeAgent));
+        const dbFilter = feedFilter === 'all' ? undefined : feedFilter;
+        const [feedData, counts] = await Promise.all([
+          fetchFeed(activeAgent, undefined, 20, dbFilter),
+          fetchFilterCounts(activeAgent),
+        ]);
+        setEntries(feedData);
+        setFilterCounts(counts);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -70,7 +80,7 @@ export function SocialClient({ userEmail, userId }: SocialClientProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab, activeAgent]);
+  }, [activeTab, activeAgent, feedFilter]);
 
   useEffect(() => {
     setLoading(true);
@@ -94,7 +104,30 @@ export function SocialClient({ userEmail, userId }: SocialClientProps) {
 
   const handleTabChange = (tab: SocialViewType) => {
     setActiveTab(tab);
+    setFeedFilter('all');
     setLoading(true);
+  };
+
+  const handleFeedFilterChange = (filter: 'all' | 'post' | 'comment' | 'reply' | 'viral') => {
+    setFeedFilter(filter);
+    setLoading(true);
+  };
+
+  const handleLoadMore = async () => {
+    if (loadingMore || entries.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const lastEntry = entries[entries.length - 1];
+      const dbFilter = feedFilter === 'all' ? undefined : feedFilter;
+      const more = await fetchFeed(activeAgent, lastEntry.created_at, 20, dbFilter);
+      if (more.length > 0) {
+        setEntries((prev) => [...prev, ...more]);
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   const handleAgentChange = (agentId: string) => {
@@ -190,7 +223,17 @@ export function SocialClient({ userEmail, userId }: SocialClientProps) {
           </div>
         ) : (
           <>
-            {activeTab === 'feed' && <FeedView entries={entries} loading={loading} />}
+            {activeTab === 'feed' && (
+              <FeedView
+                entries={entries}
+                loading={loading}
+                activeFilter={feedFilter}
+                onFilterChange={handleFeedFilterChange}
+                onLoadMore={handleLoadMore}
+                loadingMore={loadingMore}
+                filterCounts={filterCounts}
+              />
+            )}
             {activeTab === 'wins' && <WinsView entries={entries} loading={loading} />}
             {activeTab === 'daily' && <DailyView snapshots={dailyEntries} loading={loading} />}
           </>

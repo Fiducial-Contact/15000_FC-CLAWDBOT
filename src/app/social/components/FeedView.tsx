@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowUp, MessageCircle, MessageSquare, ExternalLink } from 'lucide-react';
+import { ArrowUp, MessageCircle, MessageSquare, ExternalLink, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { ActivityEntry, ResultType } from '@/lib/types/social';
 import { formatDistanceToNow } from 'date-fns';
@@ -12,12 +11,25 @@ const getMoltbookUrl = (entry: ActivityEntry): string | null => {
   return null;
 };
 
+type FilterType = 'all' | 'post' | 'comment' | 'reply' | 'viral';
+
+interface FilterCounts {
+  all: number;
+  post: number;
+  comment: number;
+  reply: number;
+  viral: number;
+}
+
 interface FeedViewProps {
   entries: ActivityEntry[];
   loading: boolean;
+  activeFilter: FilterType;
+  onFilterChange: (filter: FilterType) => void;
+  onLoadMore: () => void;
+  loadingMore: boolean;
+  filterCounts?: FilterCounts;
 }
-
-type FilterType = 'all' | 'post' | 'comment' | 'reply' | 'viral';
 
 const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -56,14 +68,7 @@ const getResultBadgeStyles = (result: ResultType | null) => {
   }
 };
 
-export function FeedView({ entries, loading }: FeedViewProps) {
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
-
-  const filteredEntries = entries.filter((entry) => {
-    if (activeFilter === 'all') return true;
-    if (activeFilter === 'viral') return entry.result === 'viral';
-    return entry.type === activeFilter;
-  });
+export function FeedView({ entries, loading, activeFilter, onFilterChange, onLoadMore, loadingMore, filterCounts }: FeedViewProps) {
 
   if (loading) {
     return (
@@ -100,26 +105,42 @@ export function FeedView({ entries, loading }: FeedViewProps) {
   return (
     <div className="space-y-4">
       {/* Filter Bar */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {FILTERS.map((filter) => (
-          <button
-            key={filter.key}
-            onClick={() => setActiveFilter(filter.key)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              activeFilter === filter.key
-                ? 'bg-[var(--fc-black)] text-white'
-                : 'bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)] hover:bg-[var(--fc-border-gray)]'
-            }`}
-          >
-            {filter.label}
-          </button>
-        ))}
+      <div className="flex gap-6 border-b border-[var(--fc-border-gray)] mb-4">
+        {FILTERS.map((filter) => {
+          const isActive = activeFilter === filter.key;
+          const count = filterCounts?.[filter.key];
+          return (
+            <button
+              key={filter.key}
+              onClick={() => onFilterChange(filter.key)}
+              className={`relative pb-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'text-[var(--fc-black)]'
+                  : 'text-[var(--fc-body-gray)] hover:text-[var(--fc-dark-gray)]'
+              }`}
+            >
+              {filter.label}
+              {count !== undefined && (
+                <span className={`ml-1.5 text-xs tabular-nums ${isActive ? 'text-[var(--fc-body-gray)]' : 'text-[var(--fc-light-gray)]'}`}>
+                  {count}
+                </span>
+              )}
+              {isActive && (
+                <motion.div
+                  layoutId="feed-filter-underline"
+                  className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--fc-black)]"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Feed Entries */}
       <div className="space-y-3">
         <AnimatePresence mode="popLayout">
-          {filteredEntries.map((entry, index) => {
+          {entries.map((entry, index) => {
             const relativeTime = formatDistanceToNow(new Date(entry.created_at), {
               addSuffix: true,
             });
@@ -195,12 +216,20 @@ export function FeedView({ entries, loading }: FeedViewProps) {
       </div>
 
       {/* Load More Button */}
-      {filteredEntries.length > 0 && (
+      {entries.length > 0 && (
         <button
-          onClick={() => console.log('Load more clicked')}
-          className="w-full py-3 text-center text-[var(--fc-body-gray)] bg-white rounded-xl border border-[var(--fc-border-gray)] hover:bg-[var(--fc-subtle-gray)] transition-colors"
+          onClick={onLoadMore}
+          disabled={loadingMore}
+          className="w-full py-3 text-center text-[var(--fc-body-gray)] bg-white rounded-xl border border-[var(--fc-border-gray)] hover:bg-[var(--fc-subtle-gray)] transition-colors disabled:opacity-50"
         >
-          Load more...
+          {loadingMore ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading...
+            </span>
+          ) : (
+            'Load more...'
+          )}
         </button>
       )}
     </div>
