@@ -241,6 +241,47 @@ Open http://localhost:3000
 
 See `.env.example` for a complete template.
 
+### Authentication Architecture
+
+Web Chat 使用**双层认证**：
+
+| 层级 | 系统 | 解决什么 | 存储 |
+|------|------|---------|------|
+| **Layer 1** | Supabase Auth | 用户身份验证（email/password → JWT） | HTTP cookie |
+| **Layer 2** | Gateway Device Pairing | 设备级授权（Ed25519 密钥对 → deviceToken） | localStorage |
+
+**完整流程：**
+
+```
+用户打开页面 → Supabase 检查 session cookie
+  → 未登录 → 显示登录页
+  → 已登录 → 进入 /chat
+    → useGateway hook 建立 WebSocket 连接
+    → 客户端生成 Ed25519 密钥对（首次，存 localStorage）
+    → Gateway 发 challenge nonce → 客户端签名回传
+      → 已配对设备 → 发 deviceToken，连接成功
+      → 新设备 → 显示 pairing code，等 admin 批准
+```
+
+**触发 pairing 的场景：**
+- 首次使用的浏览器/设备
+- 清除了 localStorage
+- 换了浏览器
+
+**Device Pairing 管理（注意：不同于 Channel Pairing）：**
+
+```bash
+# 列出设备（pending + paired）
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot devices list"
+
+# 批准设备 pairing（用 devices list 中的 requestId）
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot devices approve <requestId>"
+
+# Channel pairing（Teams/WhatsApp，不同于 device pairing）
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing list msteams"
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot pairing approve msteams <code>"
+```
+
 ### Gateway Connection
 
 ```

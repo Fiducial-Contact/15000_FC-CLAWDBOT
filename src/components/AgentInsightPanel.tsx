@@ -2,9 +2,9 @@
 
 import { memo, useState, useEffect, useMemo, useRef, startTransition } from 'react';
 import { motion } from 'motion/react';
-import { Zap, Brain, Activity, Sparkles, Minimize2, ChevronDown, ArrowUpRight } from 'lucide-react';
+import { Zap, Brain, Activity, Sparkles, Minimize2, ChevronDown, ArrowUpRight, BookOpen } from 'lucide-react';
 import type { SessionEntry, ToolEventPayload } from '@/lib/gateway/types';
-import type { UserProfile } from '@/lib/types/profile';
+import type { UserProfile, LearningEvent } from '@/lib/types/profile';
 
 type ProfileSyncSource = 'initial' | 'update' | 'context_break';
 type ProfileSyncStatus = 'sent' | 'skipped' | 'failed';
@@ -26,7 +26,7 @@ type ToolTraceItem = {
   summary?: string;
 };
 
-type PanelSectionKey = 'learningProfile' | 'profileSync' | 'activeTools' | 'researchTrace' | 'thoughtProcess';
+type PanelSectionKey = 'learningProfile' | 'agentLearning' | 'profileSync' | 'activeTools' | 'researchTrace' | 'thoughtProcess';
 
 interface AgentInsightPanelProps {
   isConnected: boolean;
@@ -38,6 +38,7 @@ interface AgentInsightPanelProps {
   userProfile: UserProfile | null;
   profileSyncInfo: ProfileSyncInfo | null;
   recentToolTrace: ToolTraceItem[];
+  recentLearning?: LearningEvent[];
 }
 
 function formatTokenCount(count: number | undefined): string {
@@ -68,6 +69,21 @@ function statusPillClasses(status: ProfileSyncStatus) {
   if (status === 'sent') return 'bg-emerald-500/15 text-emerald-700 border-emerald-500/20';
   if (status === 'failed') return 'bg-red-500/10 text-red-700 border-red-500/20';
   return 'bg-amber-500/10 text-amber-700 border-amber-500/20';
+}
+
+function dimensionBadgeClasses(dimension: LearningEvent['dimension']): string {
+  switch (dimension) {
+    case 'skill-level':
+      return 'bg-blue-500/10 text-blue-700 border-blue-500/20';
+    case 'interaction-style':
+      return 'bg-purple-500/10 text-purple-700 border-purple-500/20';
+    case 'topic-interests':
+      return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20';
+    case 'frustration-signals':
+      return 'bg-red-500/10 text-red-700 border-red-500/20';
+    default:
+      return 'bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)] border-[var(--fc-border-gray)]/50';
+  }
 }
 
 function AgentInsightSectionHeader({
@@ -158,9 +174,11 @@ export const AgentInsightPanel = memo(function AgentInsightPanel({
   userProfile,
   profileSyncInfo,
   recentToolTrace,
+  recentLearning = [],
 }: AgentInsightPanelProps) {
   const defaultSections: Record<PanelSectionKey, boolean> = {
     learningProfile: false,
+    agentLearning: false,
     profileSync: false,
     activeTools: true,
     researchTrace: true,
@@ -183,6 +201,7 @@ export const AgentInsightPanel = memo(function AgentInsightPanel({
           const parsed = JSON.parse(raw) as Partial<Record<PanelSectionKey, boolean>>;
           setOpenSections({
             learningProfile: parsed.learningProfile ?? false,
+            agentLearning: parsed.agentLearning ?? false,
             profileSync: parsed.profileSync ?? false,
             activeTools: parsed.activeTools ?? true,
             researchTrace: parsed.researchTrace ?? true,
@@ -291,7 +310,7 @@ export const AgentInsightPanel = memo(function AgentInsightPanel({
           </div>
           <div className="flex items-center gap-2">
             <a
-              href="/insights"
+              href="/memory"
               onClick={(e) => e.stopPropagation()}
               className="p-2 rounded-lg hover:bg-[var(--fc-subtle-gray)] text-[var(--fc-light-gray)] hover:text-[var(--fc-body-gray)] transition-colors"
               title="Open timeline"
@@ -420,6 +439,69 @@ export const AgentInsightPanel = memo(function AgentInsightPanel({
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Agent Learning */}
+          <div className="space-y-3">
+            <AgentInsightSectionHeader
+              title="Agent Learning"
+              icon={<BookOpen size={14} />}
+              badge={
+                recentLearning.length > 0 ? (
+                  <span className="text-[10px] text-[var(--fc-body-gray)] bg-[var(--fc-subtle-gray)] px-2 py-0.5 rounded-full font-medium">
+                    {recentLearning.length}
+                  </span>
+                ) : undefined
+              }
+              open={openSections.agentLearning}
+              onToggle={() => toggleSection('agentLearning')}
+            />
+
+            {openSections.agentLearning && (
+              <>
+                {recentLearning.length === 0 && (
+                  <div className="p-3.5 rounded-xl bg-[var(--fc-subtle-gray)]/40 border border-[var(--fc-border-gray)]/50 text-[12px] text-[var(--fc-body-gray)]">
+                    No learning data yet
+                  </div>
+                )}
+
+                {recentLearning.length > 0 && (
+                  <div className="space-y-2">
+                    {recentLearning.slice(0, 10).map((event) => (
+                      <div
+                        key={event.id}
+                        className="p-3 rounded-xl bg-white border border-[var(--fc-border-gray)]/50 shadow-sm space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${dimensionBadgeClasses(event.dimension)}`}
+                          >
+                            {event.dimension}
+                          </span>
+                          <span className="text-[10px] text-[var(--fc-light-gray)] font-mono">
+                            {formatIsoTime(event.created_at)} · {event.evidence?.length ?? 0} evidence
+                          </span>
+                        </div>
+                        <div className="text-[12px] text-[var(--fc-body-gray)] leading-relaxed">
+                          {event.insight}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 rounded-full bg-[var(--fc-subtle-gray)] overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-all"
+                              style={{ width: `${Math.round(event.confidence * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-mono text-[var(--fc-light-gray)]">
+                            {Math.round(event.confidence * 100)}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </>

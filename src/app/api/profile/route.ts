@@ -24,10 +24,24 @@ export async function GET() {
   }
 
   if (!data) {
-    return Response.json({ profile: null });
+    return Response.json({ profile: null, recentLearning: [] });
   }
 
-  return Response.json({ profile: profileFromRow(data) });
+  const { data: learningData, error: learningError } = await supabase
+    .from('learning_events')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (learningError) {
+    console.error('Failed to load learning events:', learningError);
+  }
+
+  return Response.json({
+    profile: profileFromRow(data),
+    recentLearning: learningError ? [] : (learningData ?? []),
+  });
 }
 
 export async function PUT(request: NextRequest) {

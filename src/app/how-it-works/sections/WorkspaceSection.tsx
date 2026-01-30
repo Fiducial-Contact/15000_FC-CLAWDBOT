@@ -271,6 +271,38 @@ export function WorkspaceSection() {
                             <span className="ml-1">&quot;记住这个&quot; · Repeated mentions · Corrections</span>
                         </div>
                     </div>
+
+                    <div className="bg-white/80 rounded-lg border border-[var(--fc-border-gray)]/60 p-3 mb-4">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--fc-light-gray)] mb-2">
+                            Learning Loop (simple)
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-[10px]">
+                            {[
+                                { label: 'WebChat', desc: 'message + feedback' },
+                                { label: 'Signals', desc: 'metadata hints' },
+                                { label: 'Nightly Learner', desc: 'LLM synthesis' },
+                                { label: 'Supabase', desc: 'learning_events' },
+                                { label: 'UI', desc: 'Agent Pulse / Insights' },
+                            ].map((node, idx) => (
+                                <div key={node.label} className="flex items-center gap-2">
+                                    <div className="flex-1 rounded-lg bg-[var(--fc-subtle-gray)]/60 border border-[var(--fc-border-gray)]/50 px-2 py-2">
+                                        <div className="text-[var(--fc-black)] font-semibold">{node.label}</div>
+                                        <div className="text-[9px] text-[var(--fc-body-gray)]">{node.desc}</div>
+                                    </div>
+                                    {idx < 4 && (
+                                        <span className="hidden sm:inline text-[var(--fc-light-gray)]">→</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="mt-3 text-[10px] text-[var(--fc-body-gray)] leading-relaxed">
+                            Signals are <span className="font-medium">hints</span>, not hard rules. The learner uses an LLM to generalize from evidence,
+                            applies the allowlist, and only writes back high-confidence learnings (so it stays flexible, not “hardcoded”).
+                        </div>
+                    </div>
+
                     <div className="font-mono text-[11px] space-y-1 text-[var(--fc-body-gray)] mb-3">
                         <div className="text-violet-600">memory/users/</div>
                         {[

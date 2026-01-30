@@ -45,7 +45,34 @@ ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot logs -f"
 ssh -p 2222 haiwei@46.224.225.164 "sudo XDG_RUNTIME_DIR=/run/user/0 systemctl --user restart clawdbot-gateway"
 ```
 
-## Pairing 管理（新成员接入）
+## Pairing 管理
+
+### 两套 Pairing 系统
+
+| 类型 | 适用场景 | CLI 命令 | 触发条件 |
+|------|---------|---------|---------|
+| **Device Pairing** | Web Chat（浏览器设备） | `clawdbot devices` | 新浏览器 / 清 localStorage / 换设备 |
+| **Channel Pairing** | Teams / WhatsApp（渠道用户） | `clawdbot pairing` | 新用户首次私聊 bot |
+
+### Device Pairing（Web Chat）
+
+Web Chat 使用 Supabase Auth（用户身份） + Gateway Device Pairing（设备授权）双层认证。
+用户看到 `Authorization required. Your pairing code: XXXXXXXX` 时，执行以下操作：
+
+```bash
+# 列出设备（pending + paired）
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot devices list"
+
+# 批准（用 devices list 输出的 Request 列 UUID）
+ssh -p 2222 haiwei@46.224.225.164 "sudo clawdbot devices approve <requestId>"
+```
+
+> **注意**：pairing code（如 `d7f18b33`）是 deviceId 前缀，不能直接用于 approve 命令。
+> 必须用 `devices list` 中显示的完整 requestId（UUID 格式）。
+> 如果 approve 报 `unknown requestId`，说明 Gateway 内存中没有该请求（WebSocket 已断开），
+> 让用户刷新页面重新连接，再立即执行 approve。
+
+### Channel Pairing（Teams / WhatsApp 新成员）
 
 ```bash
 # 列出待批准的配对请求

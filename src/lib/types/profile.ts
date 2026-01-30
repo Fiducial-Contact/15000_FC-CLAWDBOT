@@ -15,6 +15,28 @@ export interface UserProfile {
     lastUpdated: string;
 }
 
+export type LearningDimension =
+    | 'skill-level'
+    | 'interaction-style'
+    | 'topic-interests'
+    | 'frustration-signals';
+
+export interface LearningEvent {
+    id: string;
+    user_id: string;
+    dimension: LearningDimension;
+    insight: string;
+    confidence: number;
+    evidence: unknown[];
+    source: 'heartbeat' | 'self-review' | 'manual';
+    created_at: string;
+}
+
+export interface ProfileWithLearning {
+    profile: UserProfile | null;
+    recentLearning: LearningEvent[];
+}
+
 export const MOCK_USER_PROFILE: UserProfile = {
     name: 'Anand',
     role: 'Motion Designer',

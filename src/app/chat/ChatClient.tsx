@@ -38,8 +38,11 @@ import { AnimatedText } from '@/components/AnimatedText';
 import { MessageGroup } from '@/components/MessageGroup';
 import { ReplayControls } from '@/components/ReplayControls';
 import { useReplayMode } from '@/hooks/useReplayMode';
+import { useSessionHints } from '@/hooks/useSessionHints';
+import type { SessionHint } from '@/hooks/useSessionHints';
+import { useSignalCapture } from '@/hooks/useSignalCapture';
 import { createDefaultProfile } from '@/lib/profile';
-import type { UserProfile } from '@/lib/types/profile';
+import type { UserProfile, LearningEvent } from '@/lib/types/profile';
 import type { ChatAttachmentInput } from '@/lib/gateway/types';
 
 interface ChatClientProps {
@@ -215,6 +218,8 @@ function buildProfileSyncMessage(params: {
   userId: string;
   source: 'initial' | 'update' | 'context_break';
   profile: UserProfile;
+  sessionHints?: SessionHint[];
+  recentLearning?: Array<{ dimension: string; insight: string; confidence: number }>;
 }) {
   const profile = params.profile;
   const safeProfile = {
@@ -227,7 +232,7 @@ function buildProfileSyncMessage(params: {
     ...(profile.lastUpdated ? { lastUpdated: profile.lastUpdated } : {}),
   };
 
-  return [
+  const lines = [
     PROFILE_SYNC_PREFIX,
     `userId: ${params.userId}`,
     `source: ${params.source}`,
@@ -237,13 +242,29 @@ function buildProfileSyncMessage(params: {
     '',
     'Profile JSON:',
     JSON.stringify(safeProfile, null, 2),
+  ];
+
+  if (params.sessionHints && params.sessionHints.length > 0) {
+    lines.push('', `sessionHints: ${JSON.stringify(params.sessionHints)}`);
+  }
+
+  if (params.recentLearning && params.recentLearning.length > 0) {
+    lines.push('', 'recentLearning:');
+    for (const event of params.recentLearning) {
+      lines.push(`  - [${event.dimension}] ${event.insight} (confidence: ${event.confidence})`);
+    }
+  }
+
+  lines.push(
     '',
     'Instructions:',
     '- Do not respond to this message.',
     '- Do not quote it back to the user.',
     `- If you keep per-user memory files, mirror it to: memory/users/webchat/${params.userId}.profile.json`,
     '- If you cannot write files, just use it as context.',
-  ].join('\n');
+  );
+
+  return lines.join('\n');
 }
 
 export function ChatClient({ userEmail, userId }: ChatClientProps) {
@@ -624,12 +645,22 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileModalSource, setProfileModalSource] = useState<'manual' | 'onboarding'>('manual');
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [recentLearning, setRecentLearning] = useState<LearningEvent[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileSyncInfo, setProfileSyncInfo] = useState<ProfileSyncInfo | null>(null);
   const lastProfileSyncKeyRef = useRef<string | null>(null);
   const lastContextBreakSyncAtRef = useRef<number>(0);
+  const [sessionHints, setSessionHints] = useState<SessionHint[]>([]);
+  const { processMessage: processSessionHints } = useSessionHints(currentSessionKey);
+  const {
+    setSessionKey: setSignalSessionKey,
+    captureMessage: captureSignalMessage,
+    captureAssistantReply,
+    captureGatewayHealth,
+    captureFeedback,
+  } = useSignalCapture(userId);
 
 
   useEffect(() => {
@@ -715,6 +746,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       const emailPrefix = userEmail.split('@')[0] || '';
       const fallback = createDefaultProfile({ name: emailPrefix });
       setProfile(data.profile ?? fallback);
+      setRecentLearning(Array.isArray(data.recentLearning) ? data.recentLearning : []);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load profile';
       setProfileError(message);
@@ -755,6 +787,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
         learnedContext: profileToSync.learnedContext,
         lastUpdated: profileToSync.lastUpdated,
       },
+      sessionHints: sessionHints.length > 0 ? sessionHints : undefined,
     };
 
     const fingerprint = hashString(JSON.stringify(syncPayload));
@@ -786,8 +819,20 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       return;
     }
 
+    const highConfidenceLearning = recentLearning
+      .filter((e) => e.confidence > 0.7)
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 5)
+      .map((e) => ({ dimension: e.dimension, insight: e.insight, confidence: e.confidence }));
+
     try {
-      await sendMessage({ text: buildProfileSyncMessage({ userId, source, profile: profileToSync }), silent: true });
+      await sendMessage({ text: buildProfileSyncMessage({
+        userId,
+        source,
+        profile: profileToSync,
+        sessionHints: sessionHints.length > 0 ? sessionHints : undefined,
+        recentLearning: highConfidenceLearning.length > 0 ? highConfidenceLearning : undefined,
+      }), silent: true });
       setProfileSyncInfo({
         at: new Date().toISOString(),
         source,
@@ -810,7 +855,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
     localStorage.setItem(storageKey, fingerprint);
     lastProfileSyncKeyRef.current = syncKey;
-  }, [profile, isConnected, currentSessionKey, userId, sendMessage]);
+  }, [profile, isConnected, currentSessionKey, userId, sendMessage, sessionHints, recentLearning]);
 
   const saveProfile = useCallback(async (updatedProfile: UserProfile) => {
     setProfileSaving(true);
@@ -905,6 +950,39 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
     void syncProfileToAgent('context_break');
   }, [messages, syncProfileToAgent]);
+
+  useEffect(() => {
+    if (!currentSessionKey) return;
+    const sessionMessages = messages
+      .filter((m) => m.sessionKey === currentSessionKey)
+      .map((m) => ({ id: m.id, role: m.role, content: m.content || '' }));
+    if (sessionMessages.length === 0) return;
+    processSessionHints(sessionMessages, (newHints) => {
+      setSessionHints(newHints);
+    });
+  }, [messages, currentSessionKey, processSessionHints]);
+
+  useEffect(() => {
+    void setSignalSessionKey(currentSessionKey ?? null);
+  }, [currentSessionKey, setSignalSessionKey]);
+
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    if (last.role === 'assistant' && !last.id.startsWith('hist_')) {
+      captureAssistantReply();
+    }
+  }, [messages, captureAssistantReply]);
+
+  const prevConnectedRef = useRef(isConnected);
+  useEffect(() => {
+    if (prevConnectedRef.current && !isConnected) {
+      captureGatewayHealth('disconnect');
+    } else if (!prevConnectedRef.current && isConnected) {
+      captureGatewayHealth('reconnect');
+    }
+    prevConnectedRef.current = isConnected;
+  }, [isConnected, captureGatewayHealth]);
 
   const buildSessionText = useCallback(() => {
     const lines: string[] = [];
@@ -1332,6 +1410,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                       showThinking={showDetails}
                       showTools={showDetails}
                       onRetryAttachment={retryFileAttachment}
+                      onFeedback={(messageId, value) => captureFeedback(messageId, value)}
                     />
                   ))}
 
@@ -1391,6 +1470,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                   }
                 }
 
+                captureSignalMessage(message);
                 sendMessage({ text: message, attachments });
               }}
               onAbort={abortChat}
@@ -1448,6 +1528,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
         userProfile={profile}
         profileSyncInfo={profileSyncInfo}
         recentToolTrace={recentToolTrace}
+        recentLearning={recentLearning}
       />
     </div>
   );

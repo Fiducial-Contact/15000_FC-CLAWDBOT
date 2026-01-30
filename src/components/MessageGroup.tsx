@@ -2,7 +2,7 @@
 
 import { memo, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Copy, Check, FileText, X, Download, AlertTriangle, Loader2, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Copy, Check, FileText, X, Download, AlertTriangle, Loader2, ZoomIn, ChevronLeft, ChevronRight, ThumbsUp, ThumbsDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -100,6 +100,7 @@ interface MessageGroupProps {
   showThinking?: boolean;
   showTools?: boolean;
   onRetryAttachment?: (messageId: string, attachmentId: string) => void;
+  onFeedback?: (messageId: string, value: 'helpful' | 'not_helpful') => void;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -554,10 +555,28 @@ export const MessageGroup = memo(function MessageGroup({
   showThinking = false,
   showTools = false,
   onRetryAttachment,
+  onFeedback,
 }: MessageGroupProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [videoLightboxIndex, setVideoLightboxIndex] = useState<number | null>(null);
+  const [feedbackState, setFeedbackState] = useState<'helpful' | 'not_helpful' | null>(null);
+  const [feedbackDisabled, setFeedbackDisabled] = useState(false);
   const isUser = role === 'user';
+
+  const handleFeedback = useCallback((value: 'helpful' | 'not_helpful') => {
+    if (feedbackDisabled || !onFeedback) return;
+    const messageId = messages[0]?.id;
+    if (!messageId) return;
+    setFeedbackState(value);
+    setFeedbackDisabled(true);
+    onFeedback(messageId, value);
+    setTimeout(() => {
+      setFeedbackState(null);
+    }, 1500);
+    setTimeout(() => {
+      setFeedbackDisabled(false);
+    }, 2000);
+  }, [feedbackDisabled, onFeedback, messages]);
 
   const aggregated = useMemo(() => {
     const allThinking: Array<{ messageId: string; block: ThinkingBlockType }> = [];
@@ -737,7 +756,7 @@ export const MessageGroup = memo(function MessageGroup({
 
   return (
     <motion.div
-      className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} mb-6`}
+      className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} mb-6 group/msggroup`}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
@@ -861,6 +880,37 @@ export const MessageGroup = memo(function MessageGroup({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {!isUser && onFeedback && (
+            <div className="flex items-center gap-1 opacity-0 group-hover/msggroup:opacity-100 transition-opacity duration-200 mt-1">
+              <button
+                type="button"
+                disabled={feedbackDisabled}
+                onClick={() => handleFeedback('helpful')}
+                className={`p-1.5 rounded-lg transition-all duration-200 ${
+                  feedbackState === 'helpful'
+                    ? 'text-green-600 bg-green-50'
+                    : 'text-[var(--fc-light-gray)] hover:text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)]'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                title="Helpful"
+              >
+                <ThumbsUp size={14} />
+              </button>
+              <button
+                type="button"
+                disabled={feedbackDisabled}
+                onClick={() => handleFeedback('not_helpful')}
+                className={`p-1.5 rounded-lg transition-all duration-200 ${
+                  feedbackState === 'not_helpful'
+                    ? 'text-red-600 bg-red-50'
+                    : 'text-[var(--fc-light-gray)] hover:text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)]'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                title="Not helpful"
+              >
+                <ThumbsDown size={14} />
+              </button>
             </div>
           )}
 

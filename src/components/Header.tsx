@@ -73,11 +73,11 @@ export const Header = memo(function Header({ userName, onLogout, onChangePasswor
               How It Works
             </Link>
             <Link
-              href="/insights"
+              href="/memory"
               className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-[var(--fc-body-gray)] hover:text-[var(--fc-dark-gray)] hover:bg-[var(--fc-subtle-gray)] transition-colors"
             >
               <BarChart3 size={12} />
-              Insights
+              Memory
             </Link>
           </div>
         </div>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
-import { CalendarDays, ChevronDown, ExternalLink, Loader2, Zap } from 'lucide-react';
+import { BookOpen, CalendarDays, ChevronDown, ExternalLink, Loader2, MessageSquare, ThumbsDown, ThumbsUp, Zap } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/client';
 import { useGateway } from '@/lib/gateway/useGateway';
@@ -12,7 +12,7 @@ import { Header } from '@/components/Header';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { createDefaultProfile } from '@/lib/profile';
-import type { UserProfile } from '@/lib/types/profile';
+import type { LearningEvent, UserProfile } from '@/lib/types/profile';
 
 type SessionTrace = {
   toolCalls: Array<{
@@ -29,6 +29,30 @@ type SessionTraceState = {
   error?: string;
   trace?: SessionTrace;
 };
+
+type UserSignal = {
+  id: string;
+  user_id: string;
+  signal_type: string;
+  payload: unknown;
+  session_key_hash: string | null;
+  created_at: string;
+};
+
+function dimensionBadgeClasses(dimension: LearningEvent['dimension']): string {
+  switch (dimension) {
+    case 'skill-level':
+      return 'bg-blue-500/10 text-blue-700 border-blue-500/20';
+    case 'interaction-style':
+      return 'bg-purple-500/10 text-purple-700 border-purple-500/20';
+    case 'topic-interests':
+      return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20';
+    case 'frustration-signals':
+      return 'bg-red-500/10 text-red-700 border-red-500/20';
+    default:
+      return 'bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)] border-[var(--fc-border-gray)]/50';
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -217,6 +241,32 @@ function formatTime(updatedAt: unknown): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function extractStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+}
+
+function extractTopicTags(signal: UserSignal): string[] {
+  const payload = isRecord(signal.payload) ? signal.payload : {};
+
+  if (signal.signal_type === 'topic_mentioned') {
+    return extractStringArray(payload.topics);
+  }
+
+  if (signal.signal_type === 'message_sent') {
+    return extractStringArray(payload.topicTags);
+  }
+
+  return [];
+}
+
+function extractFeedbackValue(signal: UserSignal): 'helpful' | 'not_helpful' | null {
+  if (signal.signal_type !== 'feedback') return null;
+  const payload = isRecord(signal.payload) ? signal.payload : {};
+  const value = payload.value;
+  return value === 'helpful' || value === 'not_helpful' ? value : null;
+}
+
 export function InsightsClient({ userEmail, userId }: { userEmail: string; userId: string }) {
   const router = useRouter();
   const supabase = createClient();
@@ -235,9 +285,14 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [recentLearning, setRecentLearning] = useState<LearningEvent[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+
+  const [signals, setSignals] = useState<UserSignal[]>([]);
+  const [signalsLoading, setSignalsLoading] = useState(false);
+  const [signalsError, setSignalsError] = useState<string | null>(null);
 
   const fetchProfile = useCallback(async () => {
     setProfileLoading(true);
@@ -252,6 +307,7 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
       const emailPrefix = userEmail.split('@')[0] || '';
       const fallback = createDefaultProfile({ name: emailPrefix });
       setProfile(data.profile ?? fallback);
+      setRecentLearning(Array.isArray(data.recentLearning) ? data.recentLearning : []);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load profile';
       setProfileError(message);
@@ -287,6 +343,88 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
+
+  const fetchSignals = useCallback(async () => {
+    setSignalsLoading(true);
+    setSignalsError(null);
+    try {
+      const res = await fetch('/api/signals?limit=100');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to load signals');
+      }
+      const data = await res.json();
+      setSignals(Array.isArray(data.signals) ? data.signals : []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load signals';
+      setSignalsError(message);
+    } finally {
+      setSignalsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSignals();
+  }, [fetchSignals]);
+
+  const signalSummary = useMemo(() => {
+    const now = Date.now();
+    const window24hMs = 24 * 60 * 60 * 1000;
+    const window7dMs = 7 * 24 * 60 * 60 * 1000;
+    const cutoff24h = now - window24hMs;
+    const cutoff7d = now - window7dMs;
+
+    const counts24h = {
+      messages: 0,
+      followUps: 0,
+      rapid: 0,
+      feedbackHelpful: 0,
+      feedbackNotHelpful: 0,
+      disconnects: 0,
+      reconnects: 0,
+      aborted: 0,
+    };
+
+    const topicCounts = new Map<string, number>();
+    let lastSignalMs = 0;
+
+    for (const s of signals) {
+      const ms = getTimeMs(s.created_at);
+      if (ms > lastSignalMs) lastSignalMs = ms;
+
+      if (ms >= cutoff24h) {
+        if (s.signal_type === 'message_sent') counts24h.messages += 1;
+        if (s.signal_type === 'follow_up') counts24h.followUps += 1;
+        if (s.signal_type === 'rapid_messages') counts24h.rapid += 1;
+        if (s.signal_type === 'gateway_disconnect') counts24h.disconnects += 1;
+        if (s.signal_type === 'gateway_reconnect') counts24h.reconnects += 1;
+        if (s.signal_type === 'stream_aborted') counts24h.aborted += 1;
+
+        const feedback = extractFeedbackValue(s);
+        if (feedback === 'helpful') counts24h.feedbackHelpful += 1;
+        if (feedback === 'not_helpful') counts24h.feedbackNotHelpful += 1;
+      }
+
+      if (ms >= cutoff7d) {
+        const tags = extractTopicTags(s);
+        tags.forEach((tag) => {
+          topicCounts.set(tag, (topicCounts.get(tag) ?? 0) + 1);
+        });
+      }
+    }
+
+    const topTopics = Array.from(topicCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([topic, count]) => ({ topic, count }));
+
+    return {
+      counts24h,
+      topTopics,
+      lastSignalAt: lastSignalMs ? new Date(lastSignalMs).toISOString() : null,
+      sampleSize: signals.length,
+    };
+  }, [signals]);
 
   const grouped = useMemo(() => {
     const byDay: Record<string, typeof sessions> = {};
@@ -418,11 +556,10 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
         <div className="flex items-start justify-between gap-6 mb-6">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-[var(--fc-black)] tracking-tight font-[family-name:var(--font-manrope)]">
-              Learning & Research Timeline
+              Agent Memory
             </h1>
             <p className="text-[14px] text-[var(--fc-body-gray)] mt-2 leading-relaxed max-w-2xl">
-              This page summarizes how the agent learned from your sessions: tool usage, research steps, and thinking excerpts.
-              For full, message-level evidence, open the chat and enable <span className="font-semibold">Details</span>.
+              Everything your assistant has picked up about how you work &mdash; the topics you care about, how you like to communicate, and where it can do better.
             </p>
             <div className="mt-3 flex items-center gap-2 text-[12px] text-[var(--fc-light-gray)]">
               <span className={`inline-flex w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-[var(--fc-action-red)]'}`} />
@@ -438,6 +575,208 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
           >
             Back to Chat
           </button>
+        </div>
+
+        <div className="grid grid-cols-12 gap-4 mb-6">
+          <div className="col-span-12 lg:col-span-7 lg:row-span-2 bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--fc-border-gray)]/60 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-[var(--fc-subtle-gray)] text-[var(--fc-dark-gray)]">
+                  <BookOpen size={16} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[12px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+                    Agent Learning
+                  </span>
+                  <span className="text-[12px] text-[var(--fc-body-gray)]">
+                    What your assistant figured out about you over time
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-[11px] text-[var(--fc-body-gray)] bg-[var(--fc-subtle-gray)] px-2 py-0.5 rounded-full font-semibold">
+                  {recentLearning.length}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-5">
+              {recentLearning.length === 0 ? (
+                <div className="p-4 rounded-xl bg-[var(--fc-subtle-gray)]/40 border border-[var(--fc-border-gray)]/50 text-[13px] text-[var(--fc-body-gray)] leading-relaxed">
+                  Your assistant hasn&apos;t picked up any patterns yet. Keep chatting &mdash; it learns in the background and updates here automatically.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentLearning.slice(0, 8).map((event) => (
+                    <div
+                      key={event.id}
+                      className="rounded-xl border border-[var(--fc-border-gray)]/60 bg-white shadow-sm p-4 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${dimensionBadgeClasses(event.dimension)}`}
+                          >
+                            {event.dimension}
+                          </span>
+                          <span className="text-[11px] text-[var(--fc-light-gray)] font-mono">
+                            {formatTime(event.created_at)} · {event.evidence?.length ?? 0} evidence
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-[var(--fc-light-gray)] font-mono flex-shrink-0">
+                          {Math.round(event.confidence * 100)}%
+                        </span>
+                      </div>
+                      <div className="text-[13px] text-[var(--fc-body-gray)] leading-relaxed">
+                        <p className="line-clamp-3">{event.insight}</p>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[var(--fc-subtle-gray)] overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-emerald-500 transition-all"
+                          style={{ width: `${Math.round(event.confidence * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="col-span-12 lg:col-span-5 bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--fc-border-gray)]/60 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-[var(--fc-subtle-gray)] text-[var(--fc-dark-gray)]">
+                  <Zap size={16} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[12px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+                    Activity (24h)
+                  </span>
+                  <span className="text-[12px] text-[var(--fc-body-gray)]">
+                    How active you&apos;ve been in the last 24 hours
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {signalsLoading && <Loader2 size={14} className="animate-spin text-[var(--fc-light-gray)]" />}
+                <button
+                  type="button"
+                  onClick={fetchSignals}
+                  className="text-[12px] font-semibold text-[var(--fc-body-gray)] hover:text-[var(--fc-black)]"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {signalsError && (
+                <div className="text-[12px] text-[var(--fc-action-red)]">
+                  {signalsError}
+                </div>
+              )}
+
+              {!signalsError && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-[var(--fc-subtle-gray)]/40 border border-[var(--fc-border-gray)]/50 p-3">
+                      <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+                        Messages
+                      </div>
+                      <div className="text-[20px] font-bold text-[var(--fc-black)] mt-1">
+                        {signalSummary.counts24h.messages}
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-[var(--fc-subtle-gray)]/40 border border-[var(--fc-border-gray)]/50 p-3">
+                      <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+                        Follow-ups
+                      </div>
+                      <div className="text-[20px] font-bold text-[var(--fc-black)] mt-1">
+                        {signalSummary.counts24h.followUps}
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-[var(--fc-subtle-gray)]/40 border border-[var(--fc-border-gray)]/50 p-3">
+                      <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+                        Bursts
+                      </div>
+                      <div className="text-[20px] font-bold text-[var(--fc-black)] mt-1">
+                        {signalSummary.counts24h.rapid}
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-[var(--fc-subtle-gray)]/40 border border-[var(--fc-border-gray)]/50 p-3">
+                      <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+                        Interruptions
+                      </div>
+                      <div className="text-[20px] font-bold text-[var(--fc-black)] mt-1">
+                        {signalSummary.counts24h.aborted}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-[12px] text-[var(--fc-body-gray)]">
+                      <ThumbsUp size={14} className="text-emerald-600" />
+                      <span className="font-semibold">{signalSummary.counts24h.feedbackHelpful}</span>
+                      <ThumbsDown size={14} className="text-[var(--fc-action-red)] ml-2" />
+                      <span className="font-semibold">{signalSummary.counts24h.feedbackNotHelpful}</span>
+                    </div>
+                    <div className="text-[11px] text-[var(--fc-light-gray)] font-mono">
+                      {signalSummary.sampleSize} events
+                      {signalSummary.lastSignalAt ? ` · last ${formatTime(signalSummary.lastSignalAt)}` : ''}
+                    </div>
+                  </div>
+
+                  {(signalSummary.counts24h.disconnects > 0 || signalSummary.counts24h.reconnects > 0) && (
+                    <div className="text-[12px] text-[var(--fc-body-gray)]">
+                      <span className="font-semibold">Gateway:</span>{' '}
+                      {signalSummary.counts24h.disconnects} disconnect · {signalSummary.counts24h.reconnects} reconnect
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="col-span-12 lg:col-span-5 bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--fc-border-gray)]/60 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-[var(--fc-subtle-gray)] text-[var(--fc-dark-gray)]">
+                  <MessageSquare size={16} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[12px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+                    Your Topics (7d)
+                  </span>
+                  <span className="text-[12px] text-[var(--fc-body-gray)]">
+                    What you&apos;ve been asking about this week
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5">
+              {signalSummary.topTopics.length === 0 ? (
+                <div className="text-[13px] text-[var(--fc-body-gray)]">
+                  No topics detected yet. Start a conversation and your interests will appear here.
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {signalSummary.topTopics.map((t) => (
+                    <span
+                      key={t.topic}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--fc-subtle-gray)] text-[var(--fc-body-gray)] border border-[var(--fc-border-gray)]/60 text-[12px] font-medium"
+                    >
+                      {t.topic}
+                      <span className="text-[11px] text-[var(--fc-light-gray)] font-mono">
+                        {t.count}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="space-y-4">
