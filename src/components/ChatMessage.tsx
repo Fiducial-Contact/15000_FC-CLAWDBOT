@@ -766,7 +766,7 @@ export const ChatMessage = memo(function ChatMessage({
                 className={`px-4 py-3 text-[14px] leading-relaxed max-w-full overflow-hidden break-words ${isUser
                     ? 'bg-[var(--fc-charcoal)] text-white rounded-2xl rounded-tr-sm'
                     : 'bg-white text-[var(--fc-black)] rounded-2xl rounded-tl-sm shadow-sm border border-[var(--fc-border-gray)]'
-                  } ${isStreaming ? 'min-w-[180px]' : ''}`}
+                  } ${isStreaming ? 'min-w-[180px] streaming-bubble' : ''}`}
               >
                 {(images.length > 0 || videos.length > 0 || nonVideoFileAttachments.length > 0) && (
                   <div className="space-y-3 mb-3">
@@ -805,7 +805,7 @@ export const ChatMessage = memo(function ChatMessage({
                   isUser ? (
                     <span className="whitespace-pre-wrap break-words text-white" style={{ color: '#ffffff !important' }}>{displayContent}</span>
                   ) : (
-                    <div className={`markdown-content ${isStreaming ? 'streaming' : ''}`}>
+                    <div className="markdown-content">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}
@@ -815,7 +815,7 @@ export const ChatMessage = memo(function ChatMessage({
                       </ReactMarkdown>
                       {isStreaming && (
                         <span
-                          className="inline-block w-[3px] h-[1em] bg-[var(--fc-body-gray)] rounded-full align-middle ml-0.5 animate-blink"
+                          className="inline-block w-[2px] h-[1.1em] bg-[#be1e2c] rounded-full align-middle ml-1 animate-cursor-pulse"
                           aria-hidden="true"
                         />
                       )}

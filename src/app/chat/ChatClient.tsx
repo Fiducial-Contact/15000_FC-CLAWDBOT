@@ -120,10 +120,10 @@ const CAPABILITY_CATEGORIES = [
 
 const THINKING_PHRASES = [
   'Thinking...',
-  'Checking references...',
-  'Looking up the best approach...',
-  'Putting it together...',
-  'Almost there...',
+  'Pulling context...',
+  'Cross-referencing...',
+  'Composing response...',
+  'Still working...',
 ];
 
 const PROFILE_SYNC_PREFIX = '[fc:profile-sync:v1]';
@@ -1160,14 +1160,21 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                     />
                   ))}
 
-                  {displayStreamingContent && (
-                    <ChatMessage
-                      messageId="stream"
-                      content={displayStreamingContent}
-                      role="assistant"
-                      isStreaming
-                    />
-                  )}
+                  <AnimatePresence>
+                    {displayStreamingContent && (
+                      <motion.div
+                        key="streaming-msg"
+                        exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                      >
+                        <ChatMessage
+                          messageId="stream"
+                          content={displayStreamingContent}
+                          role="assistant"
+                          isStreaming
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <ToolStream
                     activeTools={activeTools}
