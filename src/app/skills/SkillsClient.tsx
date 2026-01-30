@@ -15,6 +15,7 @@ import { GatewayClient } from '@/lib/gateway/client';
 import { useSkills } from '@/lib/gateway/useSkills';
 import { SkillCard } from '@/components/SkillCard';
 import { Header } from '@/components/Header';
+import { LoginModal } from '@/components/LoginModal';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +27,9 @@ interface SkillsClientProps {
 type FilterStatus = 'all' | 'ready' | 'disabled' | 'error' | 'missing';
 
 export function SkillsClient({ userEmail, userId }: SkillsClientProps) {
+  const isGuest = !userId;
   const router = useRouter();
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const wsUrl = process.env.NEXT_PUBLIC_GATEWAY_WS_URL;
   const token = process.env.NEXT_PUBLIC_GATEWAY_TOKEN;
 
@@ -120,7 +123,11 @@ export function SkillsClient({ userEmail, userId }: SkillsClientProps) {
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900">
-      <Header userName={userEmail} onLogout={handleLogout} />
+      <Header
+        userName={isGuest ? undefined : userEmail}
+        onLogout={isGuest ? undefined : handleLogout}
+        onLogin={isGuest ? () => setIsLoginModalOpen(true) : undefined}
+      />
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-8">
 
@@ -283,6 +290,15 @@ export function SkillsClient({ userEmail, userId }: SkillsClientProps) {
           </motion.div>
         </div>
       </main>
+
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsLoginModalOpen(false);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

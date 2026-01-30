@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useGateway } from '@/lib/gateway/useGateway';
 import type { ChatContentBlock } from '@/lib/gateway/types';
 import { Header } from '@/components/Header';
+import { LoginModal } from '@/components/LoginModal';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { createDefaultProfile } from '@/lib/profile';
@@ -269,8 +270,10 @@ function extractFeedbackValue(signal: UserSignal): 'helpful' | 'not_helpful' | n
 }
 
 export function InsightsClient({ userEmail, userId }: { userEmail: string; userId: string }) {
+  const isGuest = !userId;
   const router = useRouter();
   const supabase = createClient();
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   const {
     sessions,
@@ -547,10 +550,11 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
   return (
     <div className="min-h-screen bg-gradient-to-b from-[var(--fc-off-white)] to-white">
       <Header
-        userName={userEmail}
-        onLogout={handleLogout}
-        onChangePassword={handleOpenChangePassword}
-        onOpenProfile={handleOpenProfile}
+        userName={isGuest ? undefined : userEmail}
+        onLogout={isGuest ? undefined : handleLogout}
+        onChangePassword={isGuest ? undefined : handleOpenChangePassword}
+        onOpenProfile={isGuest ? undefined : handleOpenProfile}
+        onLogin={isGuest ? () => setIsLoginModalOpen(true) : undefined}
       />
 
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-8">
@@ -1008,6 +1012,15 @@ export function InsightsClient({ userEmail, userId }: { userEmail: string; userI
         isSaving={profileSaving}
         error={profileError}
         onSave={saveProfile}
+      />
+
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsLoginModalOpen(false);
+          router.refresh();
+        }}
       />
     </div>
   );

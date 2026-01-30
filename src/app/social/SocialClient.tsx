@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { RefreshCw, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Header } from '@/components/Header';
+import { LoginModal } from '@/components/LoginModal';
 import { createClient } from '@/lib/supabase/client';
 import { AGENTS } from '@/lib/types/social';
 import type { ActivityEntry, DailySnapshot, AgentMetrics, SocialViewType } from '@/lib/types/social';
@@ -22,8 +23,10 @@ interface SocialClientProps {
 
 const REFRESH_INTERVAL = 2 * 60 * 1000;
 
-export function SocialClient({ userEmail }: SocialClientProps) {
+export function SocialClient({ userEmail, userId }: SocialClientProps) {
+  const isGuest = !userId;
   const router = useRouter();
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<SocialViewType>('feed');
   const [activeAgent, setActiveAgent] = useState(AGENTS[0].id);
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
@@ -110,7 +113,11 @@ export function SocialClient({ userEmail }: SocialClientProps) {
 
   return (
     <div className="min-h-screen bg-[var(--fc-off-white)]">
-      <Header userName={userEmail} onLogout={handleLogout} />
+      <Header
+        userName={isGuest ? undefined : userEmail}
+        onLogout={isGuest ? undefined : handleLogout}
+        onLogin={isGuest ? () => setIsLoginModalOpen(true) : undefined}
+      />
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -189,6 +196,15 @@ export function SocialClient({ userEmail }: SocialClientProps) {
           </>
         )}
       </div>
+
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsLoginModalOpen(false);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

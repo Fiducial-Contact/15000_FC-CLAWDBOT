@@ -37,17 +37,7 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Protected routes - redirect to login if not authenticated
-  const protectedPaths = ['/social', '/memory', '/skills'];
-  if (!user && protectedPaths.some(p => request.nextUrl.pathname.startsWith(p))) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/';
-    return NextResponse.redirect(url);
-  }
+  await supabase.auth.getUser();
 
   // Redirect all visitors from / to /chat (chat is the main landing page)
   if (request.nextUrl.pathname === '/') {
