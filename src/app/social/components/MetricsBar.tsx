@@ -12,14 +12,14 @@ export function MetricsBar({ metrics }: MetricsBarProps) {
   const hasData = metrics.karma > 0 || metrics.rank > 0 || metrics.postsTotal > 0;
 
   const formatNumber = (num: number) => {
-    if (!hasData) return '—';
+    if (!hasData) return '0';
     return num.toLocaleString();
   };
 
   const formatDelta = (num: number) => {
     if (!hasData) return '—';
     if (num === 0) return '0';
-    return num > 0 ? `+${num}` : `${num}`;
+    return num > 0 ? `+${num.toLocaleString()}` : num.toLocaleString();
   };
 
   const getDeltaColor = (num: number) => {
@@ -36,7 +36,7 @@ export function MetricsBar({ metrics }: MetricsBarProps) {
       {/* Karma Card with Sparkline */}
       <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
         <div className="flex items-start justify-between mb-2">
-          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-body-gray)]">
             Karma
           </span>
           <Trophy className="w-4 h-4 text-amber-500" />
@@ -69,7 +69,7 @@ export function MetricsBar({ metrics }: MetricsBarProps) {
       {/* Rank Card */}
       <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
         <div className="flex items-start justify-between mb-2">
-          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-body-gray)]">
             Rank
           </span>
           <Medal className="w-4 h-4 text-purple-500" />
@@ -82,7 +82,7 @@ export function MetricsBar({ metrics }: MetricsBarProps) {
       {/* 24h Change Card */}
       <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
         <div className="flex items-start justify-between mb-2">
-          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-body-gray)]">
             24h Change
           </span>
           {metrics.karmaDelta >= 0 ? (
@@ -99,7 +99,7 @@ export function MetricsBar({ metrics }: MetricsBarProps) {
       {/* Posts Card */}
       <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
         <div className="flex items-start justify-between mb-2">
-          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-body-gray)]">
             Posts
           </span>
           <MessageSquare className="w-4 h-4 text-blue-500" />
@@ -112,7 +112,7 @@ export function MetricsBar({ metrics }: MetricsBarProps) {
       {/* Win Rate Card with Fraction */}
       <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
         <div className="flex items-start justify-between mb-2">
-          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-light-gray)]">
+          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-body-gray)]">
             Win Rate
           </span>
           <Target className="w-4 h-4 text-[var(--fc-red)]" />

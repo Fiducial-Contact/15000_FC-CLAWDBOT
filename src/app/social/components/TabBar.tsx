@@ -2,7 +2,6 @@
 
 import { Activity, TrendingUp, Trophy } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { motion } from 'motion/react';
 import type { SocialViewType } from '@/lib/types/social';
 
 interface TabBarProps {
@@ -30,17 +29,10 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
               onClick={() => onTabChange(tab.id)}
               className={`relative flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
                 isActive
-                  ? 'text-white'
+                  ? 'bg-[var(--fc-black)] text-white shadow-md'
                   : 'text-[var(--fc-body-gray)] hover:bg-[var(--fc-subtle-gray)]'
               }`}
             >
-              {isActive && (
-                <motion.div
-                  layoutId="activeTab"
-                  className="absolute inset-0 bg-[var(--fc-black)] rounded-lg -z-10 shadow-md"
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                />
-              )}
               <Icon className="w-4 h-4" />
               <span className="text-sm">{tab.label}</span>
             </button>

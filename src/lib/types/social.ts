@@ -69,12 +69,4 @@ export const AGENTS: AgentConfig[] = [
     moltbookProfile: 'https://moltbook.com/agent/finserveagent',
     notionDbId: '',
   },
-  {
-    id: 'voxagent',
-    name: 'VoxAgent',
-    displayName: 'VoxAgent',
-    xHandle: '@Voxyz_AI',
-    moltbookProfile: 'https://moltbook.com/agent/voxagent',
-    notionDbId: '9f89f03eba4f45bc98514da1e486fb43',
-  },
 ];
