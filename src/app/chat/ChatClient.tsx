@@ -19,6 +19,8 @@ import {
   Zap,
   Copy,
   Check,
+  Play,
+  Square,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useGateway } from '@/lib/gateway/useGateway';
@@ -34,6 +36,8 @@ import { UserProfileModal } from '@/components/UserProfileModal';
 import { ToolStream } from '@/components/ToolStream';
 import { AnimatedText } from '@/components/AnimatedText';
 import { MessageGroup } from '@/components/MessageGroup';
+import { ReplayControls } from '@/components/ReplayControls';
+import { useReplayMode } from '@/hooks/useReplayMode';
 import { createDefaultProfile } from '@/lib/profile';
 import type { UserProfile } from '@/lib/types/profile';
 import type { ChatAttachmentInput } from '@/lib/gateway/types';
@@ -127,6 +131,7 @@ const THINKING_PHRASES = [
 ];
 
 const PROFILE_SYNC_PREFIX = '[fc:profile-sync:v1]';
+const HISTORY_DISPLAY_LIMIT = 1000;
 
 type ProfileSyncSource = 'initial' | 'update' | 'context_break';
 type ProfileSyncStatus = 'sent' | 'skipped' | 'failed';
@@ -276,6 +281,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     isSidebarOpen,
     isDraftSession,
     activeTools,
+    historyLimitReached,
     retryFileAttachment,
     sendMessage,
     createNewSession,
@@ -285,6 +291,23 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     abortChat,
     setSessionVerbose,
   } = useGateway({ userId });
+
+  const {
+    isReplaying,
+    isPaused: replayPaused,
+    replayPhase,
+    replayMessages,
+    replayStreamingContent,
+    replayProgress,
+    replaySession,
+    speed: replaySpeed,
+    startReplay,
+    pauseReplay,
+    resumeReplay,
+    stopReplay,
+    setSpeed: setReplaySpeed,
+    skipToNext,
+  } = useReplayMode();
 
   const currentSession = useMemo(
     () => sessions.find((session) => session.sessionKey === currentSessionKey),
@@ -417,10 +440,12 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
 
   const visibleMessages = useMemo(() => {
     const sessionMessages = messages.filter((message) => message.sessionKey === currentSessionKey);
+    const hasStreamingAssistant = Boolean(streamingContent && !isNoiseText(streamingContent));
     const shouldHideStandaloneNo = (message: (typeof sessionMessages)[number], index: number) => {
       if (message.role !== 'assistant' || typeof message.content !== 'string') return false;
       const trimmed = message.content.trim();
       if (trimmed !== 'NO') return false;
+      if (hasStreamingAssistant) return true;
       const next = sessionMessages[index + 1];
       if (next && next.role === 'assistant') return true;
       const prev = sessionMessages[index - 1];
@@ -454,7 +479,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       if (hasThinkingOnly && !message.content.trim()) return false;
       return !isNoiseText(message.content || '');
     });
-  }, [messages, currentSessionKey, showDetails, isNoiseText]);
+  }, [messages, currentSessionKey, showDetails, isNoiseText, streamingContent]);
 
   const recentToolTrace = useMemo<ToolTraceItem[]>(() => {
     if (!currentSessionKey) return [];
@@ -506,9 +531,25 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   }, [messages, currentSessionKey]);
 
   const displayStreamingContent = useMemo(() => {
+    if (isReplaying) return replayStreamingContent;
     if (showDetails) return streamingContent;
+    if (streamingContent.trim().toUpperCase() === 'NO') return '';
     return isNoiseText(streamingContent) ? '' : streamingContent;
-  }, [streamingContent, showDetails, isNoiseText]);
+  }, [streamingContent, showDetails, isNoiseText, isReplaying, replayStreamingContent]);
+
+  useEffect(() => {
+    if (isReplaying) stopReplay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSessionKey]);
+
+  useEffect(() => {
+    if (!isReplaying) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') stopReplay();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isReplaying, stopReplay]);
 
   useEffect(() => {
     setIsClient(true);
@@ -562,8 +603,10 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     isAutoScrollRef.current = distanceFromBottom < threshold;
   }, []);
 
+  const effectiveMessageCount = isReplaying ? replayMessages.length : visibleMessages.length;
+
   useEffect(() => {
-    const hasNewMessage = visibleMessages.length > lastMessageCountRef.current;
+    const hasNewMessage = effectiveMessageCount > lastMessageCountRef.current;
     const streamLength = displayStreamingContent.length;
     const streamingGrowing = streamLength > lastStreamLengthRef.current;
 
@@ -573,9 +616,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       scrollToBottom('auto');
     }
 
-    lastMessageCountRef.current = visibleMessages.length;
+    lastMessageCountRef.current = effectiveMessageCount;
     lastStreamLengthRef.current = streamLength;
-  }, [visibleMessages.length, displayStreamingContent, scrollToBottom]);
+  }, [effectiveMessageCount, displayStreamingContent, scrollToBottom]);
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -744,7 +787,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     }
 
     try {
-      await sendMessage({ text: buildProfileSyncMessage({ userId, source, profile: profileToSync }) });
+      await sendMessage({ text: buildProfileSyncMessage({ userId, source, profile: profileToSync }), silent: true });
       setProfileSyncInfo({
         at: new Date().toISOString(),
         source,
@@ -966,15 +1009,17 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   }, [sessionMenuOpen]);
 
   const isLoadingHistory = loadingHistoryKey === currentSessionKey && visibleMessages.length === 0;
-  const isEmpty = ((visibleMessages.length === 0 && !displayStreamingContent) || isDraftSession) && !isLoadingHistory;
+  const isEmpty = !isReplaying && ((visibleMessages.length === 0 && !displayStreamingContent) || isDraftSession) && !isLoadingHistory;
+
+  const effectiveMessages = isReplaying ? replayMessages : visibleMessages;
 
   const groupedMessages = useMemo(() => {
     const groups: Array<{
       role: 'user' | 'assistant';
-      messages: typeof visibleMessages;
+      messages: typeof effectiveMessages;
     }> = [];
 
-    for (const message of visibleMessages) {
+    for (const message of effectiveMessages) {
       const lastGroup = groups[groups.length - 1];
       if (lastGroup && lastGroup.role === message.role) {
         lastGroup.messages.push(message);
@@ -983,7 +1028,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       }
     }
     return groups;
-  }, [visibleMessages]);
+  }, [effectiveMessages]);
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-[var(--fc-off-white)] to-white">
@@ -1045,6 +1090,20 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                 title="Shows thinking process and tool calls. Tool details appear after the response completes."
               >
                 Details {showDetails ? 'On' : 'Off'}
+              </button>
+              <button
+                type="button"
+                disabled={visibleMessages.length === 0 && !isReplaying}
+                onClick={() => isReplaying ? stopReplay() : startReplay(visibleMessages, currentSessionKey && currentSession ? { sessionKey: currentSessionKey, sessionTitle: currentSession.displayName || currentSession.label || 'Chat' } : undefined)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 ${isReplaying
+                  ? 'bg-[var(--fc-black)] text-white border-[var(--fc-black)]'
+                  : visibleMessages.length === 0
+                    ? 'bg-white text-[var(--fc-light-gray)] border-[var(--fc-border-gray)] cursor-not-allowed'
+                    : 'bg-white text-[var(--fc-body-gray)] border-[var(--fc-border-gray)] hover:border-[var(--fc-light-gray)]'
+                  }`}
+                title={isReplaying ? 'Stop replay' : 'Replay session messages for screen recording'}
+              >
+                {isReplaying ? <><Square size={12} /> Stop</> : <><Play size={12} /> Replay</>}
               </button>
             </div>
 
@@ -1259,6 +1318,12 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                 </motion.div>
               ) : (
                 <div className="space-y-2 pb-4">
+                  {historyLimitReached && (
+                    <div className="flex items-center justify-center gap-2 px-4 py-2.5 mx-auto max-w-md rounded-full bg-[var(--fc-subtle-gray)] text-[var(--fc-light-gray)] text-xs">
+                      <AlertCircle size={13} />
+                      <span>Showing the latest {HISTORY_DISPLAY_LIMIT} messages. Older messages are not loaded.</span>
+                    </div>
+                  )}
                   {groupedMessages.map((group, groupIndex) => (
                     <MessageGroup
                       key={`group-${groupIndex}-${group.messages[0]?.id}`}
@@ -1270,21 +1335,14 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                     />
                   ))}
 
-                  <AnimatePresence>
-                    {displayStreamingContent && (
-                      <motion.div
-                        key="streaming-msg"
-                        exit={{ opacity: 0, transition: { duration: 0.12 } }}
-                      >
-                        <ChatMessage
-                          messageId="stream"
-                          content={displayStreamingContent}
-                          role="assistant"
-                          isStreaming
-                        />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {displayStreamingContent && (
+                    <ChatMessage
+                      messageId="stream"
+                      content={displayStreamingContent}
+                      role="assistant"
+                      isStreaming={isReplaying ? replayPhase === 'streaming' : true}
+                    />
+                  )}
 
                   <ToolStream
                     activeTools={activeTools}
@@ -1292,7 +1350,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                     showDetails={showDetails}
                   />
 
-                  {isLoading && !displayStreamingContent && (
+                  {(isReplaying ? replayPhase === 'thinking' : isLoading && !displayStreamingContent) && (
                     <motion.div
                       className="flex items-center gap-3 text-[var(--fc-body-gray)] pl-12"
                       initial={{ opacity: 0 }}
@@ -1314,33 +1372,52 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
           </div>
 
           {/* Chat Input */}
-          <ChatInput
-            onSend={async (message: string, attachments: ChatAttachmentInput[]) => {
-              const hasProfileData =
-                Boolean(profile?.name?.trim()) ||
-                Boolean(profile?.role?.trim()) ||
-                Boolean(profile?.software?.length) ||
-                Boolean(profile?.frequentTopics?.length) ||
-                Boolean(profile?.learnedContext?.length) ||
-                Boolean(profile?.preferences && Object.keys(profile.preferences).length);
+          {isReplaying ? null : (
+            <ChatInput
+              onSend={async (message: string, attachments: ChatAttachmentInput[]) => {
+                const hasProfileData =
+                  Boolean(profile?.name?.trim()) ||
+                  Boolean(profile?.role?.trim()) ||
+                  Boolean(profile?.software?.length) ||
+                  Boolean(profile?.frequentTopics?.length) ||
+                  Boolean(profile?.learnedContext?.length) ||
+                  Boolean(profile?.preferences && Object.keys(profile.preferences).length);
 
-              if (hasProfileData) {
-                try {
-                  await syncProfileToAgent('initial');
-                } catch (err) {
-                  console.error('Failed to sync profile to agent:', err);
+                if (hasProfileData) {
+                  try {
+                    await syncProfileToAgent('initial');
+                  } catch (err) {
+                    console.error('Failed to sync profile to agent:', err);
+                  }
                 }
-              }
 
-              sendMessage({ text: message, attachments });
-            }}
-            onAbort={abortChat}
-            disabled={isLoading || !isConnected}
-            isLoading={isLoading}
-            prefillValue={inputPrefill}
-            onPrefillConsumed={() => setInputPrefill('')}
-            isSidebarOpen={isSidebarOpen}
-          />
+                sendMessage({ text: message, attachments });
+              }}
+              onAbort={abortChat}
+              disabled={isLoading || !isConnected}
+              isLoading={isLoading}
+              prefillValue={inputPrefill}
+              onPrefillConsumed={() => setInputPrefill('')}
+              isSidebarOpen={isSidebarOpen}
+            />
+          )}
+
+          <AnimatePresence>
+            {isReplaying && (
+              <ReplayControls
+                isPaused={replayPaused}
+                phase={replayPhase}
+                progress={replayProgress}
+                speed={replaySpeed}
+                sessionTitle={replaySession?.sessionTitle}
+                onPlay={resumeReplay}
+                onPause={pauseReplay}
+                onStop={stopReplay}
+                onSpeedChange={setReplaySpeed}
+                onSkipNext={skipToNext}
+              />
+            )}
+          </AnimatePresence>
         </main>
       </div>
 

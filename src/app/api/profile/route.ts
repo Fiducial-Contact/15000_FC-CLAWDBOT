@@ -46,6 +46,26 @@ export async function PUT(request: NextRequest) {
   }
 
   const row = profileToRow(body, user.id);
+  // Preserve any additional preference keys stored server-side (e.g. session titles).
+  const { data: existingProfile, error: existingError } = await supabase
+    .from('user_profiles')
+    .select('preferences')
+    .eq('user_id', user.id)
+    .single();
+
+  if (existingError && existingError.code !== 'PGRST116') {
+    return Response.json({ error: existingError.message }, { status: 500 });
+  }
+
+  const existingPrefs =
+    existingProfile?.preferences && typeof existingProfile.preferences === 'object'
+      ? (existingProfile.preferences as Record<string, unknown>)
+      : {};
+
+  row.preferences = {
+    ...existingPrefs,
+    ...(row.preferences as Record<string, unknown>),
+  };
 
   const { data, error } = await supabase
     .from('user_profiles')

@@ -76,7 +76,7 @@ export function profileFromRow(row: DbRow): UserProfile {
   };
 }
 
-export function profileToRow(profile: UserProfile, userId: string) {
+export function profileToRow(profile: UserProfile, userId: string): Omit<DbRow, 'updated_at'> {
   return {
     user_id: userId,
     name: profile.name,

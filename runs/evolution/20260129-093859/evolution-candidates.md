@@ -1,6 +1,6 @@
 # Evolution Candidates
 
-Generated: 2026-01-30T10:21:15Z
+Generated: 2026-01-30T11:38:20Z
 
 ## State
 
@@ -8,8 +8,8 @@ Generated: 2026-01-30T10:21:15Z
 {
   "workflow": "evolution",
   "run_id": "20260129-093859",
-  "created_at": "2026-01-29T11:44:50Z",
-  "last_updated": "2026-01-30T10:21:11Z",
+  "created_at": "2026-01-30T11:17:55Z",
+  "last_updated": "2026-01-30T11:37:42Z",
   "project_root": "/Users/studio01/Documents/HH/HH_Project/15000_FC-CLAWDBOT-main",
   "next_version": "16.1.5",
   "package_manager": "pnpm",

@@ -14,6 +14,77 @@ import { ToolCard } from './ToolCard';
 import { VideoLightbox, type VideoItem } from './VideoLightbox';
 import { VideoPreviewCard } from './VideoPreviewCard';
 
+const TOOL_RESULT_NOISE = [
+  /\(no new output\)/i,
+  /process still running/i,
+  /command still running/i,
+];
+
+const TOOL_RUNNING_MARKERS = [
+  /process still running/i,
+  /command still running/i,
+  /\bin_progress\b/i,
+];
+
+const TOOL_DONE_MARKERS = [
+  /process exited with code/i,
+  /\bcompleted\b/i,
+  /\bdone\b/i,
+  /\bfinished\b/i,
+];
+
+function extractToolResultText(result: unknown): string | null {
+  if (!result) return null;
+  if (typeof result === 'string') return result;
+  if (Array.isArray(result)) {
+    const textParts = result
+      .map((item) => {
+        if (!item || typeof item !== 'object') return '';
+        const record = item as Record<string, unknown>;
+        return typeof record.text === 'string' ? record.text : '';
+      })
+      .filter(Boolean);
+    return textParts.length > 0 ? textParts.join('') : null;
+  }
+  if (typeof result === 'object') {
+    try {
+      return JSON.stringify(result, null, 2);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function isNoiseLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return true;
+  return TOOL_RESULT_NOISE.some((pattern) => pattern.test(trimmed));
+}
+
+function getProcessSessionId(block: ToolCallBlock): string | null {
+  const params = block.parameters as Record<string, unknown> | undefined;
+  const details = (block as Record<string, unknown>).details as Record<string, unknown> | undefined;
+  const directSessionId = (block as Record<string, unknown>).sessionId;
+  const candidate =
+    (params && typeof params.sessionId === 'string' && params.sessionId) ||
+    (details && typeof details.sessionId === 'string' && details.sessionId) ||
+    (typeof directSessionId === 'string' && directSessionId) ||
+    '';
+  return candidate || null;
+}
+
+function buildToolAggregationKey(block: ToolCallBlock, messageId: string, index: number): string {
+  const name = block.toolName || 'Tool';
+  const lower = name.toLowerCase();
+  if (lower.includes('process')) {
+    const sessionId = getProcessSessionId(block);
+    if (sessionId) return `process:${sessionId}`;
+  }
+  if (block.toolCallId) return `call:${block.toolCallId}`;
+  return `msg:${messageId}:${index}:${name}`;
+}
+
 interface Message {
   id: string;
   content: string;
@@ -490,7 +561,19 @@ export const MessageGroup = memo(function MessageGroup({
 
   const aggregated = useMemo(() => {
     const allThinking: Array<{ messageId: string; block: ThinkingBlockType }> = [];
-    const allTools: Array<{ messageId: string; block: ToolCallBlock }> = [];
+    const toolMap = new Map<
+      string,
+      {
+        messageId: string;
+        block: ToolCallBlock;
+        lines: string[];
+        seen: Set<string>;
+        sawRunning: boolean;
+        sawCompleted: boolean;
+        lastNonTextResult?: unknown;
+      }
+    >();
+    const toolOrder: string[] = [];
     const allImages: { src: string; label: string }[] = [];
     const allVideos: VideoItem[] = [];
     const allFiles: ChatAttachment[] = [];
@@ -502,8 +585,73 @@ export const MessageGroup = memo(function MessageGroup({
       const blocks = message.blocks || [];
       const attachments = message.attachments || [];
 
-      blocks.filter(isThinkingBlock).filter((b) => b.text?.trim()).forEach((b) => allThinking.push({ messageId: message.id, block: b as ThinkingBlockType }));
-      blocks.filter(isToolCallBlock).forEach((b) => allTools.push({ messageId: message.id, block: b as ToolCallBlock }));
+      blocks
+        .filter(isThinkingBlock)
+        .filter((b) => b.text?.trim())
+        .forEach((b) => allThinking.push({ messageId: message.id, block: b as ThinkingBlockType }));
+      blocks.filter(isToolCallBlock).forEach((b, idx) => {
+        const block = b as ToolCallBlock;
+        const key = buildToolAggregationKey(block, message.id, idx);
+        let aggregate = toolMap.get(key);
+        if (!aggregate) {
+          aggregate = {
+            messageId: message.id,
+            block: { ...block },
+            lines: [],
+            seen: new Set<string>(),
+            sawRunning: false,
+            sawCompleted: false,
+          };
+          toolMap.set(key, aggregate);
+          toolOrder.push(key);
+        }
+
+        if (!aggregate.block.toolName && block.toolName) {
+          aggregate.block.toolName = block.toolName;
+        }
+        if (!aggregate.block.parameters && block.parameters) {
+          aggregate.block.parameters = block.parameters;
+        }
+        if (block.error) {
+          aggregate.block.error = block.error;
+        }
+
+        if (block.status === 'running') aggregate.sawRunning = true;
+        if (block.status === 'completed') aggregate.sawCompleted = true;
+        if (block.status && !aggregate.block.status) {
+          aggregate.block.status = block.status;
+        }
+
+        const resultText = extractToolResultText(block.result);
+        if (resultText) {
+          const lines = resultText.split(/\r?\n/);
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            if (isNoiseLine(trimmed)) {
+              if (TOOL_RUNNING_MARKERS.some((pattern) => pattern.test(trimmed))) {
+                aggregate.sawRunning = true;
+              }
+              continue;
+            }
+            if (TOOL_RUNNING_MARKERS.some((pattern) => pattern.test(trimmed))) {
+              aggregate.sawRunning = true;
+            }
+            if (TOOL_DONE_MARKERS.some((pattern) => pattern.test(trimmed))) {
+              aggregate.sawCompleted = true;
+            }
+            if (aggregate.seen.has(trimmed)) continue;
+            aggregate.seen.add(trimmed);
+            aggregate.lines.push(line);
+            if (aggregate.lines.length > 400) {
+              const dropped = aggregate.lines.shift();
+              if (dropped) aggregate.seen.delete(dropped.trim());
+            }
+          }
+        } else if (block.result !== undefined) {
+          aggregate.lastNonTextResult = block.result;
+        }
+      });
 
       const imageAttachments = attachments.filter((a) => a.kind === 'image');
       const fileAttachments = attachments.filter((a) => a.kind === 'file');
@@ -556,6 +704,26 @@ export const MessageGroup = memo(function MessageGroup({
         textParts.push({ messageId: message.id, content: displayContent });
       }
     }
+
+    const allTools: Array<{ messageId: string; block: ToolCallBlock }> = toolOrder.map((key) => {
+      const aggregate = toolMap.get(key)!;
+      const result =
+        aggregate.lines.length > 0
+          ? aggregate.lines.join('\n')
+          : aggregate.lastNonTextResult ?? aggregate.block.result;
+      let status = aggregate.block.status ?? 'completed';
+      if (aggregate.sawRunning) status = 'running';
+      if (aggregate.sawCompleted) status = 'completed';
+      if (aggregate.block.error) status = 'failed';
+      return {
+        messageId: aggregate.messageId,
+        block: {
+          ...aggregate.block,
+          result,
+          status,
+        },
+      };
+    });
 
     return { allThinking, allTools, allImages, allVideos, allFiles, textParts };
   }, [messages, isUser]);
