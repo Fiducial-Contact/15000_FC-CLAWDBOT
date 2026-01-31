@@ -38,6 +38,9 @@ yarn-error.log*
 # scratchpad
 scratchpad/
 
+# backups (keep secrets out of git)
+archive/vps-backups/
+
 # vercel
 .vercel
 
