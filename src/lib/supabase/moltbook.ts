@@ -31,7 +31,18 @@ export async function fetchFeed(
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []) as ActivityEntry[];
+  const entries = (data ?? []) as ActivityEntry[];
+
+  if (!filterType && entries.length > 1) {
+    const POST_BOOST_MS = 30 * 60 * 1000;
+    entries.sort((a, b) => {
+      const aTime = new Date(a.created_at).getTime() + (a.type === 'post' ? POST_BOOST_MS : 0);
+      const bTime = new Date(b.created_at).getTime() + (b.type === 'post' ? POST_BOOST_MS : 0);
+      return bTime - aTime;
+    });
+  }
+
+  return entries;
 }
 
 export async function fetchWins(
