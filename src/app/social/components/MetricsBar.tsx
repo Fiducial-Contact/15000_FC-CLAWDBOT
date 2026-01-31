@@ -1,6 +1,6 @@
 'use client';
 
-import { Trophy, Medal, TrendingUp, TrendingDown, MessageSquare, Target } from 'lucide-react';
+import { Trophy, Users, TrendingUp, TrendingDown, MessageSquare, Target } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import type { AgentMetrics } from '@/lib/types/social';
 
@@ -66,16 +66,16 @@ export function MetricsBar({ metrics }: MetricsBarProps) {
         )}
       </div>
 
-      {/* Rank Card */}
+      {/* Followers Card */}
       <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
         <div className="flex items-start justify-between mb-2">
           <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--fc-body-gray)]">
-            Rank
+            Followers
           </span>
-          <Medal className="w-4 h-4 text-purple-500" />
+          <Users className="w-4 h-4 text-purple-500" />
         </div>
         <div className="text-[20px] font-bold text-[var(--fc-black)]">
-          {hasData && metrics.rank > 0 ? `#${metrics.rank}` : '—'}
+          {hasData && metrics.followers > 0 ? metrics.followers : '—'}
         </div>
       </div>
 
