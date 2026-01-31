@@ -118,9 +118,12 @@ export function SocialClient({ userEmail, userId }: SocialClientProps) {
     if (loadingMore || entries.length === 0) return;
     setLoadingMore(true);
     try {
-      const lastEntry = entries[entries.length - 1];
+      // Use the last post's created_at as cursor (not last entry, which might be a backfilled comment)
+      const posts = entries.filter((e) => e.type === 'post');
+      const lastPost = posts[posts.length - 1];
+      const cursor = lastPost?.created_at ?? entries[entries.length - 1].created_at;
       const dbFilter = feedFilter === 'all' ? undefined : feedFilter;
-      const more = await fetchFeed(activeAgent, lastEntry.created_at, 20, dbFilter);
+      const more = await fetchFeed(activeAgent, cursor, 20, dbFilter);
       if (more.length > 0) {
         setEntries((prev) => {
           const existingIds = new Set(prev.map((e) => e.id));
