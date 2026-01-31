@@ -122,7 +122,11 @@ export function SocialClient({ userEmail, userId }: SocialClientProps) {
       const dbFilter = feedFilter === 'all' ? undefined : feedFilter;
       const more = await fetchFeed(activeAgent, lastEntry.created_at, 20, dbFilter);
       if (more.length > 0) {
-        setEntries((prev) => [...prev, ...more]);
+        setEntries((prev) => {
+          const existingIds = new Set(prev.map((e) => e.id));
+          const unique = more.filter((e) => !existingIds.has(e.id));
+          return [...prev, ...unique];
+        });
       }
     } catch {
       // silent
