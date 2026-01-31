@@ -82,39 +82,30 @@ function groupEntries(entries: ActivityEntry[], filter: FilterType): FeedGroup[]
     );
   }
 
+  // In "All" view: show posts with their received replies attached
+  // Outgoing comments (commenting on others' posts) are hidden here, view them in Comments tab
+  const postIds = new Set(entries.filter((e) => e.type === 'post').map((e) => e.moltbook_post_id));
+
   const commentsByPostId = new Map<string, ActivityEntry[]>();
   for (const entry of entries) {
-    if (entry.type !== 'post' && entry.moltbook_post_id) {
+    // Only include replies that belong to posts on this page
+    if (entry.type !== 'post' && entry.moltbook_post_id && postIds.has(entry.moltbook_post_id)) {
       const arr = commentsByPostId.get(entry.moltbook_post_id) ?? [];
       arr.push(entry);
       commentsByPostId.set(entry.moltbook_post_id, arr);
     }
   }
 
-  const assigned = new Set<string>();
   const groups: FeedGroup[] = [];
-  let orphanBuf: ActivityEntry[] = [];
-
-  const flushOrphans = () => {
-    if (orphanBuf.length > 0) {
-      groups.push({ kind: 'compact', entries: [...orphanBuf] });
-      orphanBuf = [];
-    }
-  };
-
   for (const entry of entries) {
     if (entry.type === 'post') {
-      flushOrphans();
       const comments = entry.moltbook_post_id
         ? (commentsByPostId.get(entry.moltbook_post_id) ?? [])
         : [];
-      comments.forEach((c) => assigned.add(c.id));
       groups.push({ kind: 'post', entry, comments });
-    } else if (!assigned.has(entry.id)) {
-      orphanBuf.push(entry);
     }
+    // Skip orphan comments in "All" view - they belong to other posts not on this page
   }
-  flushOrphans();
   return groups;
 }
 
