@@ -195,12 +195,16 @@ function PostCard({ entry, comments, index }: { entry: ActivityEntry; comments: 
 function CompactRow({ entry }: { entry: ActivityEntry }) {
   const relativeTime = formatDistanceToNow(new Date(entry.created_at), { addSuffix: true });
   const url = getMoltbookUrl(entry);
-  const displayText = entry.title || entry.content || '';
+  const isReceived = entry.notes?.startsWith('Received:');
+  const displayText = isReceived
+    ? (entry.content || entry.title || '')
+    : (entry.title || entry.content || '');
+  const displayAuthor = isReceived && entry.target_agent ? entry.target_agent : null;
 
   return (
     <div className="flex items-center gap-3 px-3 py-2 hover:bg-[var(--fc-subtle-gray)] transition-colors rounded-lg group">
-      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getTypeBadgeStyles(entry.type)}`}>
-        {entry.type === 'comment' ? 'cmt' : 'rpl'}
+      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${isReceived ? 'bg-amber-100 text-amber-700' : getTypeBadgeStyles(entry.type)}`}>
+        {isReceived ? 'in' : entry.type === 'comment' ? 'cmt' : 'rpl'}
       </span>
       {entry.result && (
         <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getResultBadgeStyles(entry.result)}`}>
@@ -208,6 +212,7 @@ function CompactRow({ entry }: { entry: ActivityEntry }) {
         </span>
       )}
       <span className="text-sm text-[var(--fc-black)] truncate flex-1 min-w-0">
+        {displayAuthor && <span className="font-medium text-amber-700">{displayAuthor}: </span>}
         {displayText}
       </span>
       <div className="shrink-0 flex items-center gap-3 text-xs text-[var(--fc-body-gray)]">
