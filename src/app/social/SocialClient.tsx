@@ -67,8 +67,9 @@ export function SocialClient({ userEmail, userId }: SocialClientProps) {
         setEntries(await fetchWins(activeAgent));
       } else {
         const dbFilter = feedFilter === 'all' ? undefined : feedFilter;
+        const feedPageSize = feedFilter === 'all' ? 50 : 20;
         const [feedData, counts] = await Promise.all([
-          fetchFeed(activeAgent, undefined, 20, dbFilter),
+          fetchFeed(activeAgent, undefined, feedPageSize, dbFilter),
           fetchFilterCounts(activeAgent),
         ]);
         setEntries(feedData);

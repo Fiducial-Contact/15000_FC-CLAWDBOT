@@ -5,11 +5,17 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  AreaChart,
+  Area,
   CartesianGrid,
+  Cell,
+  Legend,
 } from 'recharts';
 import type { DailySnapshot } from '@/lib/types/social';
 
@@ -27,6 +33,13 @@ function formatCardDate(dateStr: string): string {
   const date = new Date(dateStr);
   return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date);
 }
+
+const CHART_TOOLTIP_STYLE = {
+  backgroundColor: 'white',
+  border: '1px solid var(--fc-border-gray)',
+  borderRadius: '8px',
+  fontSize: '12px',
+};
 
 export function DailyView({ snapshots, loading }: DailyViewProps) {
   if (loading) {
@@ -61,22 +74,45 @@ export function DailyView({ snapshots, loading }: DailyViewProps) {
     );
   }
 
-  const chartData = [...snapshots]
-    .slice(0, 14)
-    .reverse()
+  const chartSlice = [...snapshots].slice(0, 14).reverse();
+
+  const karmaRankData = chartSlice
     .filter((s) => s.karma !== null)
     .map((s) => ({
       date: formatChartDate(s.date),
       karma: s.karma,
+      rank: s.rank,
     }));
+
+  const hasRankData = karmaRankData.some((d) => d.rank !== null && d.rank > 0);
+
+  const deltaData = chartSlice
+    .filter((s) => s.karma_delta !== null)
+    .map((s) => ({
+      date: formatChartDate(s.date),
+      delta: s.karma_delta!,
+    }));
+
+  const followersData = chartSlice
+    .filter((s) => s.followers !== null)
+    .map((s) => ({
+      date: formatChartDate(s.date),
+      followers: s.followers,
+    }));
+
+  const hasKarmaData = karmaRankData.length > 1;
+  const hasDeltaData = deltaData.length > 1;
+  const hasFollowersData = followersData.length > 1;
 
   return (
     <div className="space-y-4">
-      {chartData.length > 1 && (
+      {hasKarmaData && (
         <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
-          <h3 className="text-sm font-bold text-[var(--fc-black)] mb-3">Karma Trend (Last 14 Days)</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+          <h3 className="text-sm font-bold text-[var(--fc-black)] mb-3">
+            {hasRankData ? 'Karma & Rank (14d)' : 'Karma Trend (14d)'}
+          </h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={karmaRankData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--fc-border-gray)" />
               <XAxis
                 dataKey="date"
@@ -85,29 +121,127 @@ export function DailyView({ snapshots, loading }: DailyViewProps) {
                 axisLine={{ stroke: 'var(--fc-border-gray)' }}
               />
               <YAxis
+                yAxisId="karma"
                 tick={{ fontSize: 11, fill: 'var(--fc-body-gray)' }}
                 tickLine={false}
-                axisLine={{ stroke: 'var(--fc-border-gray)' }}
+                axisLine={false}
                 tickFormatter={(v) => v.toLocaleString()}
               />
-              <Tooltip
-                formatter={(value) => [typeof value === 'number' ? value.toLocaleString() : '—', 'Karma']}
-                contentStyle={{
-                  backgroundColor: 'white',
-                  border: '1px solid var(--fc-border-gray)',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                }}
-              />
+              {hasRankData && (
+                <YAxis
+                  yAxisId="rank"
+                  orientation="right"
+                  reversed
+                  tick={{ fontSize: 11, fill: 'var(--fc-body-gray)' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `#${v}`}
+                />
+              )}
+              <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+              {hasRankData && (
+                <Legend
+                  verticalAlign="top"
+                  height={28}
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: '12px' }}
+                />
+              )}
               <Line
+                yAxisId="karma"
                 type="monotone"
                 dataKey="karma"
+                name="Karma"
                 stroke="#cc1f2d"
                 strokeWidth={2}
-                dot={{ fill: '#cc1f2d', strokeWidth: 0, r: 4 }}
-                activeDot={{ r: 6, fill: '#cc1f2d' }}
+                dot={{ fill: '#cc1f2d', strokeWidth: 0, r: 3 }}
+                activeDot={{ r: 5 }}
               />
+              {hasRankData && (
+                <Line
+                  yAxisId="rank"
+                  type="monotone"
+                  dataKey="rank"
+                  name="Rank"
+                  stroke="#7c3aed"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  dot={{ fill: '#7c3aed', strokeWidth: 0, r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+              )}
             </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {hasDeltaData && (
+        <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
+          <h3 className="text-sm font-bold text-[var(--fc-black)] mb-3">Karma Change</h3>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={deltaData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--fc-border-gray)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: 'var(--fc-body-gray)' }}
+                tickLine={false}
+                axisLine={{ stroke: 'var(--fc-border-gray)' }}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: 'var(--fc-body-gray)' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip
+                contentStyle={CHART_TOOLTIP_STYLE}
+                formatter={(value) => [typeof value === 'number' && value > 0 ? `+${value}` : String(value ?? ''), 'Change']}
+              />
+              <Bar dataKey="delta" name="Karma Δ" radius={[3, 3, 0, 0]}>
+                {deltaData.map((d, i) => (
+                  <Cell key={i} fill={d.delta >= 0 ? '#059669' : '#cc1f2d'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {hasFollowersData && (
+        <div className="bg-white rounded-2xl border border-[var(--fc-border-gray)] shadow-sm p-4">
+          <h3 className="text-sm font-bold text-[var(--fc-black)] mb-3">Followers (14d)</h3>
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={followersData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <defs>
+                <linearGradient id="followersFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--fc-border-gray)" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: 'var(--fc-body-gray)' }}
+                tickLine={false}
+                axisLine={{ stroke: 'var(--fc-border-gray)' }}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: 'var(--fc-body-gray)' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+              <Area
+                type="monotone"
+                dataKey="followers"
+                name="Followers"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                fill="url(#followersFill)"
+                dot={{ fill: '#3b82f6', strokeWidth: 0, r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       )}

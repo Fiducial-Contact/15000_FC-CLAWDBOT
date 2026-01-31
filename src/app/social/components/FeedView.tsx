@@ -1,6 +1,7 @@
 'use client';
 
-import { ArrowUp, MessageCircle, MessageSquare, ExternalLink, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowUp, MessageCircle, MessageSquare, ExternalLink, Loader2, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { ActivityEntry, ResultType } from '@/lib/types/social';
 import { formatDistanceToNow } from 'date-fns';
@@ -68,6 +69,156 @@ const getResultBadgeStyles = (result: ResultType | null) => {
   }
 };
 
+type FeedGroup =
+  | { kind: 'post'; entry: ActivityEntry }
+  | { kind: 'compact'; entries: ActivityEntry[] };
+
+function groupEntries(entries: ActivityEntry[], filter: FilterType): FeedGroup[] {
+  if (filter !== 'all') {
+    return entries.map((e) => e.type === 'post' ? { kind: 'post', entry: e } : { kind: 'compact', entries: [e] });
+  }
+
+  const groups: FeedGroup[] = [];
+  let compactBuf: ActivityEntry[] = [];
+
+  const flushCompact = () => {
+    if (compactBuf.length > 0) {
+      groups.push({ kind: 'compact', entries: [...compactBuf] });
+      compactBuf = [];
+    }
+  };
+
+  for (const entry of entries) {
+    if (entry.type === 'post') {
+      flushCompact();
+      groups.push({ kind: 'post', entry });
+    } else {
+      compactBuf.push(entry);
+    }
+  }
+  flushCompact();
+  return groups;
+}
+
+function PostCard({ entry, index }: { entry: ActivityEntry; index: number }) {
+  const relativeTime = formatDistanceToNow(new Date(entry.created_at), { addSuffix: true });
+  const url = getMoltbookUrl(entry);
+
+  return (
+    <motion.div
+      key={entry.id}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ delay: index * 0.05 }}
+      className="bg-white rounded-xl border border-[var(--fc-border-gray)] shadow-sm p-4"
+    >
+      <div className="flex items-start gap-3 mb-2">
+        <span className={`inline-block px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${getTypeBadgeStyles(entry.type)}`}>
+          {entry.type}
+        </span>
+        {entry.result && (
+          <span className={`inline-block px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${getResultBadgeStyles(entry.result)}`}>
+            {entry.result}
+          </span>
+        )}
+      </div>
+      {entry.title && (
+        <h3 className="text-base font-medium text-[var(--fc-black)] mb-1">{entry.title}</h3>
+      )}
+      {entry.content && (
+        <p className="text-sm text-[var(--fc-body-gray)] mb-3 line-clamp-2">{entry.content}</p>
+      )}
+      <div className="flex items-center gap-6 text-sm text-[var(--fc-body-gray)]">
+        <div className="flex items-center gap-1.5">
+          <ArrowUp className="w-4 h-4" />
+          <span className="font-medium">{entry.karma}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <MessageCircle className="w-4 h-4" />
+          <span className="font-medium">{entry.comment_count}</span>
+        </div>
+        <span className="ml-auto flex items-center gap-3">
+          <span>{relativeTime}</span>
+          {url && (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline font-medium">
+              <ExternalLink className="w-3.5 h-3.5" />
+              View
+            </a>
+          )}
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
+function CompactRow({ entry }: { entry: ActivityEntry }) {
+  const relativeTime = formatDistanceToNow(new Date(entry.created_at), { addSuffix: true });
+  const url = getMoltbookUrl(entry);
+  const displayText = entry.title || entry.content || '';
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 hover:bg-[var(--fc-subtle-gray)] transition-colors rounded-lg group">
+      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getTypeBadgeStyles(entry.type)}`}>
+        {entry.type === 'comment' ? 'cmt' : 'rpl'}
+      </span>
+      {entry.result && (
+        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getResultBadgeStyles(entry.result)}`}>
+          {entry.result}
+        </span>
+      )}
+      <span className="text-sm text-[var(--fc-black)] truncate flex-1 min-w-0">
+        {displayText}
+      </span>
+      <div className="shrink-0 flex items-center gap-3 text-xs text-[var(--fc-body-gray)]">
+        <span className="flex items-center gap-1 tabular-nums">
+          <ArrowUp className="w-3 h-3" />
+          {entry.karma}
+        </span>
+        <span className="text-[var(--fc-light-gray)]">{relativeTime}</span>
+        {url && (
+          <a href={url} target="_blank" rel="noopener noreferrer" className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-600">
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CompactGroup({ entries, index }: { entries: ActivityEntry[]; index: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const COLLAPSE_THRESHOLD = 6;
+  const VISIBLE_WHEN_COLLAPSED = 4;
+
+  const shouldCollapse = entries.length >= COLLAPSE_THRESHOLD;
+  const visibleEntries = shouldCollapse && !expanded ? entries.slice(0, VISIBLE_WHEN_COLLAPSED) : entries;
+  const hiddenCount = entries.length - VISIBLE_WHEN_COLLAPSED;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12 }}
+      transition={{ delay: index * 0.05 }}
+      className="bg-white rounded-xl border border-[var(--fc-border-gray)] shadow-sm py-1 divide-y divide-[var(--fc-subtle-gray)]"
+    >
+      {visibleEntries.map((entry) => (
+        <CompactRow key={entry.id} entry={entry} />
+      ))}
+      {shouldCollapse && !expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-[var(--fc-body-gray)] hover:text-[var(--fc-black)] transition-colors"
+        >
+          <ChevronDown className="w-3.5 h-3.5" />
+          {hiddenCount} more {hiddenCount === 1 ? 'reply' : 'replies'}
+        </button>
+      )}
+    </motion.div>
+  );
+}
+
 export function FeedView({ entries, loading, activeFilter, onFilterChange, onLoadMore, loadingMore, filterCounts }: FeedViewProps) {
 
   if (loading) {
@@ -101,6 +252,8 @@ export function FeedView({ entries, loading, activeFilter, onFilterChange, onLoa
       </div>
     );
   }
+
+  const groups = groupEntries(entries, activeFilter);
 
   return (
     <div className="space-y-4">
@@ -140,77 +293,12 @@ export function FeedView({ entries, loading, activeFilter, onFilterChange, onLoa
       {/* Feed Entries */}
       <div className="space-y-3">
         <AnimatePresence mode="popLayout">
-          {entries.map((entry, index) => {
-            const relativeTime = formatDistanceToNow(new Date(entry.created_at), {
-              addSuffix: true,
-            });
-
-            return (
-              <motion.div
-                key={entry.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ delay: index * 0.05 }}
-                className="bg-white rounded-xl border border-[var(--fc-border-gray)] shadow-sm p-4"
-              >
-                <div className="flex items-start gap-3 mb-2">
-                  <span
-                    className={`inline-block px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${getTypeBadgeStyles(
-                      entry.type
-                    )}`}
-                  >
-                    {entry.type}
-                  </span>
-                  {entry.result && (
-                    <span
-                      className={`inline-block px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${getResultBadgeStyles(
-                        entry.result
-                      )}`}
-                    >
-                      {entry.result}
-                    </span>
-                  )}
-                </div>
-
-                {entry.title && (
-                  <h3 className="text-base font-medium text-[var(--fc-black)] mb-1">
-                    {entry.title}
-                  </h3>
-                )}
-
-                {entry.content && (
-                  <p className="text-sm text-[var(--fc-body-gray)] mb-3 line-clamp-2">
-                    {entry.content}
-                  </p>
-                )}
-
-                <div className="flex items-center gap-6 text-sm text-[var(--fc-body-gray)]">
-                  <div className="flex items-center gap-1.5">
-                    <ArrowUp className="w-4 h-4" />
-                    <span className="font-medium">{entry.karma}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <MessageCircle className="w-4 h-4" />
-                    <span className="font-medium">{entry.comment_count}</span>
-                  </div>
-                  <span className="ml-auto flex items-center gap-3">
-                    <span>{relativeTime}</span>
-                    {getMoltbookUrl(entry) && (
-                      <a
-                        href={getMoltbookUrl(entry)!}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-blue-600 hover:underline font-medium"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        View
-                      </a>
-                    )}
-                  </span>
-                </div>
-              </motion.div>
-            );
+          {groups.map((group, index) => {
+            if (group.kind === 'post') {
+              return <PostCard key={group.entry.id} entry={group.entry} index={index} />;
+            }
+            const groupKey = group.entries.map((e) => e.id).join('-');
+            return <CompactGroup key={groupKey} entries={group.entries} index={index} />;
           })}
         </AnimatePresence>
       </div>
