@@ -37,7 +37,6 @@ const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'post', label: 'Posts' },
   { key: 'comment', label: 'Comments' },
   { key: 'reply', label: 'Replies' },
-  { key: 'viral', label: 'Viral Only' },
 ];
 
 const getTypeBadgeStyles = (type: string) => {
