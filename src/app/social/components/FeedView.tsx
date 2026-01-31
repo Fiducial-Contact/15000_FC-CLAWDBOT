@@ -70,39 +70,61 @@ const getResultBadgeStyles = (result: ResultType | null) => {
 };
 
 type FeedGroup =
-  | { kind: 'post'; entry: ActivityEntry }
+  | { kind: 'post'; entry: ActivityEntry; comments: ActivityEntry[] }
   | { kind: 'compact'; entries: ActivityEntry[] };
 
 function groupEntries(entries: ActivityEntry[], filter: FilterType): FeedGroup[] {
   if (filter !== 'all') {
-    return entries.map((e) => e.type === 'post' ? { kind: 'post', entry: e } : { kind: 'compact', entries: [e] });
+    return entries.map((e) =>
+      e.type === 'post'
+        ? { kind: 'post', entry: e, comments: [] }
+        : { kind: 'compact', entries: [e] },
+    );
   }
 
-  const groups: FeedGroup[] = [];
-  let compactBuf: ActivityEntry[] = [];
+  const commentsByPostId = new Map<string, ActivityEntry[]>();
+  for (const entry of entries) {
+    if (entry.type !== 'post' && entry.moltbook_post_id) {
+      const arr = commentsByPostId.get(entry.moltbook_post_id) ?? [];
+      arr.push(entry);
+      commentsByPostId.set(entry.moltbook_post_id, arr);
+    }
+  }
 
-  const flushCompact = () => {
-    if (compactBuf.length > 0) {
-      groups.push({ kind: 'compact', entries: [...compactBuf] });
-      compactBuf = [];
+  const assigned = new Set<string>();
+  const groups: FeedGroup[] = [];
+  let orphanBuf: ActivityEntry[] = [];
+
+  const flushOrphans = () => {
+    if (orphanBuf.length > 0) {
+      groups.push({ kind: 'compact', entries: [...orphanBuf] });
+      orphanBuf = [];
     }
   };
 
   for (const entry of entries) {
     if (entry.type === 'post') {
-      flushCompact();
-      groups.push({ kind: 'post', entry });
-    } else {
-      compactBuf.push(entry);
+      flushOrphans();
+      const comments = entry.moltbook_post_id
+        ? (commentsByPostId.get(entry.moltbook_post_id) ?? [])
+        : [];
+      comments.forEach((c) => assigned.add(c.id));
+      groups.push({ kind: 'post', entry, comments });
+    } else if (!assigned.has(entry.id)) {
+      orphanBuf.push(entry);
     }
   }
-  flushCompact();
+  flushOrphans();
   return groups;
 }
 
-function PostCard({ entry, index }: { entry: ActivityEntry; index: number }) {
+function PostCard({ entry, comments, index }: { entry: ActivityEntry; comments: ActivityEntry[]; index: number }) {
   const relativeTime = formatDistanceToNow(new Date(entry.created_at), { addSuffix: true });
   const url = getMoltbookUrl(entry);
+  const [expanded, setExpanded] = useState(false);
+  const COLLAPSE_AT = 3;
+  const visibleComments = !expanded && comments.length > COLLAPSE_AT ? comments.slice(0, COLLAPSE_AT) : comments;
+  const hiddenCount = comments.length - COLLAPSE_AT;
 
   return (
     <motion.div
@@ -111,43 +133,61 @@ function PostCard({ entry, index }: { entry: ActivityEntry; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ delay: index * 0.05 }}
-      className="bg-white rounded-xl border border-[var(--fc-border-gray)] shadow-sm p-4"
+      className="bg-white rounded-xl border border-[var(--fc-border-gray)] shadow-sm overflow-hidden"
     >
-      <div className="flex items-start gap-3 mb-2">
-        <span className={`inline-block px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${getTypeBadgeStyles(entry.type)}`}>
-          {entry.type}
-        </span>
-        {entry.result && (
-          <span className={`inline-block px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${getResultBadgeStyles(entry.result)}`}>
-            {entry.result}
+      <div className="p-4">
+        <div className="flex items-start gap-3 mb-2">
+          <span className={`inline-block px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${getTypeBadgeStyles(entry.type)}`}>
+            {entry.type}
           </span>
-        )}
-      </div>
-      {entry.title && (
-        <h3 className="text-base font-medium text-[var(--fc-black)] mb-1">{entry.title}</h3>
-      )}
-      {entry.content && (
-        <p className="text-sm text-[var(--fc-body-gray)] mb-3 line-clamp-2">{entry.content}</p>
-      )}
-      <div className="flex items-center gap-6 text-sm text-[var(--fc-body-gray)]">
-        <div className="flex items-center gap-1.5">
-          <ArrowUp className="w-4 h-4" />
-          <span className="font-medium">{entry.karma}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <MessageCircle className="w-4 h-4" />
-          <span className="font-medium">{entry.comment_count}</span>
-        </div>
-        <span className="ml-auto flex items-center gap-3">
-          <span>{relativeTime}</span>
-          {url && (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline font-medium">
-              <ExternalLink className="w-3.5 h-3.5" />
-              View
-            </a>
+          {entry.result && (
+            <span className={`inline-block px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${getResultBadgeStyles(entry.result)}`}>
+              {entry.result}
+            </span>
           )}
-        </span>
+        </div>
+        {entry.title && (
+          <h3 className="text-base font-medium text-[var(--fc-black)] mb-1">{entry.title}</h3>
+        )}
+        {entry.content && (
+          <p className="text-sm text-[var(--fc-body-gray)] mb-3 line-clamp-2">{entry.content}</p>
+        )}
+        <div className="flex items-center gap-6 text-sm text-[var(--fc-body-gray)]">
+          <div className="flex items-center gap-1.5">
+            <ArrowUp className="w-4 h-4" />
+            <span className="font-medium">{entry.karma}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <MessageCircle className="w-4 h-4" />
+            <span className="font-medium">{entry.comment_count}</span>
+          </div>
+          <span className="ml-auto flex items-center gap-3">
+            <span>{relativeTime}</span>
+            {url && (
+              <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline font-medium">
+                <ExternalLink className="w-3.5 h-3.5" />
+                View
+              </a>
+            )}
+          </span>
+        </div>
       </div>
+      {comments.length > 0 && (
+        <div className="border-t border-[var(--fc-border-gray)] bg-[var(--fc-subtle-gray)]/40 divide-y divide-[var(--fc-border-gray)]/50">
+          {visibleComments.map((c) => (
+            <CompactRow key={c.id} entry={c} />
+          ))}
+          {!expanded && hiddenCount > 0 && (
+            <button
+              onClick={() => setExpanded(true)}
+              className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-[var(--fc-body-gray)] hover:text-[var(--fc-black)] transition-colors"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+              {hiddenCount} more {hiddenCount === 1 ? 'reply' : 'replies'}
+            </button>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -295,7 +335,7 @@ export function FeedView({ entries, loading, activeFilter, onFilterChange, onLoa
         <AnimatePresence mode="popLayout">
           {groups.map((group, index) => {
             if (group.kind === 'post') {
-              return <PostCard key={group.entry.id} entry={group.entry} index={index} />;
+              return <PostCard key={group.entry.id} entry={group.entry} comments={group.comments} index={index} />;
             }
             const groupKey = group.entries.map((e) => e.id).join('-');
             return <CompactGroup key={groupKey} entries={group.entries} index={index} />;
