@@ -43,7 +43,7 @@ export async function fetchFeed(
 
     const existingIds = new Set(entries.map((e) => e.id));
     const postIdsWithComments = entries
-      .filter((e) => e.type === 'post' && e.comment_count > 0 && e.moltbook_post_id)
+      .filter((e) => e.type === 'post' && e.moltbook_post_id)
       .map((e) => e.moltbook_post_id!);
 
     if (postIdsWithComments.length > 0) {
