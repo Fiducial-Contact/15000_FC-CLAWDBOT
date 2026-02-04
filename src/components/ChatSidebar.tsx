@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   Pin,
+  PinOff,
   History,
 } from 'lucide-react';
 
@@ -35,10 +36,12 @@ interface ChatSidebarProps {
   sessions: SessionListEntry[];
   currentSessionKey: string;
   mainSessionKey: string;
+  pinnedSessionKeys: string[];
   isOpen: boolean;
   onNewSession: () => void;
   onSelectSession: (sessionKey: string) => void;
   onDeleteSession: (sessionKey: string) => void;
+  onTogglePin: (sessionKey: string) => void;
   onToggle: () => void;
   agentStatus?: AgentStatusProps;
 }
@@ -303,6 +306,7 @@ const IconRail = memo(function IconRail({
   sessions,
   currentSessionKey,
   mainSessionKey,
+  pinnedSessionKeys,
   onNewSession,
   onSelectSession,
   onToggle,
@@ -311,16 +315,22 @@ const IconRail = memo(function IconRail({
   sessions: SessionListEntry[];
   currentSessionKey: string;
   mainSessionKey: string;
+  pinnedSessionKeys: string[];
   onNewSession: () => void;
   onSelectSession: (sessionKey: string) => void;
   onToggle: () => void;
   agentStatus?: AgentStatusProps;
 }) {
   const recentSessions = useMemo(() => {
-    return sessions
-      .filter((s) => s.sessionKey !== mainSessionKey)
-      .slice(0, 5);
-  }, [sessions, mainSessionKey]);
+    const pinnedSet = new Set(pinnedSessionKeys);
+    const pinned = sessions.filter(
+      (s) => s.sessionKey !== mainSessionKey && pinnedSet.has(s.sessionKey)
+    );
+    const others = sessions.filter(
+      (s) => s.sessionKey !== mainSessionKey && !pinnedSet.has(s.sessionKey)
+    );
+    return [...pinned, ...others].slice(0, 5);
+  }, [sessions, mainSessionKey, pinnedSessionKeys]);
 
   const mainSession = useMemo(() => {
     return sessions.find((s) => s.sessionKey === mainSessionKey);
@@ -393,7 +403,11 @@ const IconRail = memo(function IconRail({
               aria-label={getSessionTitle(session)}
               aria-current={currentSessionKey === session.sessionKey ? 'page' : undefined}
             >
-              <MessageSquare size={18} />
+              {pinnedSessionKeys.includes(session.sessionKey) ? (
+                <Pin size={18} />
+              ) : (
+                <MessageSquare size={18} />
+              )}
               {(session.unreadCount || 0) > 0 && currentSessionKey !== session.sessionKey && (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-[var(--fc-action-red)] text-white text-[10px] font-bold rounded-full shadow-sm">
                   {(session.unreadCount || 0) > 99 ? '99+' : session.unreadCount}
@@ -428,10 +442,12 @@ export const ChatSidebar = memo(function ChatSidebar({
   sessions,
   currentSessionKey,
   mainSessionKey,
+  pinnedSessionKeys,
   isOpen,
   onNewSession,
   onSelectSession,
   onDeleteSession,
+  onTogglePin,
   onToggle,
   agentStatus,
 }: ChatSidebarProps) {
@@ -453,11 +469,21 @@ export const ChatSidebar = memo(function ChatSidebar({
     setSessionToDelete(null);
   }, []);
 
-  const { mainSession, otherSessions } = useMemo(() => {
+  const { mainSession, pinnedSessions, otherSessions } = useMemo(() => {
+    const pinnedSet = new Set(pinnedSessionKeys);
     const main = sessions.find((s) => s.sessionKey === mainSessionKey);
-    const others = sessions.filter((s) => s.sessionKey !== mainSessionKey);
-    return { mainSession: main, otherSessions: others };
-  }, [sessions, mainSessionKey]);
+    const pinned = sessions
+      .filter((s) => s.sessionKey !== mainSessionKey && pinnedSet.has(s.sessionKey))
+      .sort((a, b) => {
+        const aTime = Date.parse(a.updatedAt || a.createdAt || '') || 0;
+        const bTime = Date.parse(b.updatedAt || b.createdAt || '') || 0;
+        return bTime - aTime;
+      });
+    const others = sessions.filter(
+      (s) => s.sessionKey !== mainSessionKey && !pinnedSet.has(s.sessionKey)
+    );
+    return { mainSession: main, pinnedSessions: pinned, otherSessions: others };
+  }, [sessions, mainSessionKey, pinnedSessionKeys]);
 
   const groupedSessions = useMemo(() => groupSessionsByDate(otherSessions), [otherSessions]);
 
@@ -496,7 +522,9 @@ export const ChatSidebar = memo(function ChatSidebar({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const renderSession = (session: SessionListEntry, isPinned: boolean) => {
+  const renderSession = (session: SessionListEntry, mode: 'main' | 'pinned' | 'regular') => {
+    const isMain = mode === 'main';
+    const isPinned = mode !== 'regular';
     const isActive = session.sessionKey === currentSessionKey;
     const unreadCount = session.unreadCount || 0;
     const sessionTimestamp = session.updatedAt || session.createdAt;
@@ -550,11 +578,29 @@ export const ChatSidebar = memo(function ChatSidebar({
             <div className="flex items-center gap-1 flex-shrink-0">
               <span
                 className={`text-[10px] transition-all duration-150 ${isActive ? 'text-white/60' : 'text-[var(--fc-light-gray)]'
-                  } ${!isPinned ? 'group-hover:hidden' : ''}`}
+                  } ${!isMain ? 'group-hover:hidden' : ''}`}
               >
                 {formatSessionDate(sessionTimestamp)}
               </span>
-              {!isPinned && (
+              {!isMain && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePin(session.sessionKey);
+                  }}
+                  className={`p-0.5 rounded transition-all duration-150 opacity-60 hover:opacity-100 ${isActive
+                    ? 'text-white/90 hover:text-white'
+                    : isPinned
+                      ? 'text-[var(--fc-black)] hover:text-[var(--fc-black)]'
+                      : 'text-[var(--fc-body-gray)] hover:text-[var(--fc-black)]'
+                    }`}
+                  aria-label={isPinned ? 'Unpin conversation' : 'Pin conversation'}
+                  title={isPinned ? 'Unpin conversation' : 'Pin conversation'}
+                >
+                  {isPinned ? <PinOff size={12} /> : <Pin size={12} />}
+                </button>
+              )}
+              {!isMain && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -583,6 +629,7 @@ export const ChatSidebar = memo(function ChatSidebar({
         sessions={sessions}
         currentSessionKey={currentSessionKey}
         mainSessionKey={mainSessionKey}
+        pinnedSessionKeys={pinnedSessionKeys}
         onNewSession={onNewSession}
         onSelectSession={onSelectSession}
         onToggle={onToggle}
@@ -637,13 +684,16 @@ export const ChatSidebar = memo(function ChatSidebar({
                 <EmptyState onNewSession={onNewSession} />
               ) : (
                 <>
-                  {/* Pinned/Main Session */}
-                  {mainSession && (
+                  {/* Pinned Sessions */}
+                  {(mainSession || pinnedSessions.length > 0) && (
                     <div className="space-y-1">
                       <p className="text-[11px] font-semibold text-[var(--fc-body-gray)] uppercase tracking-wider px-3 mb-2">
                         Pinned
                       </p>
-                      {renderSession(mainSession, true)}
+                      <AnimatePresence mode="popLayout">
+                        {mainSession && renderSession(mainSession, 'main')}
+                        {pinnedSessions.map((session) => renderSession(session, 'pinned'))}
+                      </AnimatePresence>
                     </div>
                   )}
 
@@ -654,7 +704,7 @@ export const ChatSidebar = memo(function ChatSidebar({
                         {group.label}
                       </p>
                       <AnimatePresence mode="popLayout">
-                        {group.sessions.map((session) => renderSession(session, false))}
+                        {group.sessions.map((session) => renderSession(session, 'regular'))}
                       </AnimatePresence>
                     </div>
                   ))}

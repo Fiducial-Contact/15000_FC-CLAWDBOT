@@ -134,6 +134,26 @@ const THINKING_PHRASES = [
 ];
 
 const FAST_ACK_DELAY_MS = 300;
+const PINNED_SESSIONS_STORAGE_KEY = 'fc-pinned-sessions';
+const MAX_PINNED_SESSIONS = 50;
+const MAX_SESSION_KEY_LENGTH = 512;
+
+function normalizePinnedSessionKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const key = item.trim();
+    if (!key) continue;
+    if (key.length > MAX_SESSION_KEY_LENGTH) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+    if (keys.length >= MAX_PINNED_SESSIONS) break;
+  }
+  return keys;
+}
 const PROFILE_SYNC_PREFIX = '[fc:profile-sync:v1]';
 const HISTORY_DISPLAY_LIMIT = 1000;
 
@@ -284,6 +304,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [showFastAck, setShowFastAck] = useState(false);
   const fastAckTimerRef = useRef<number | null>(null);
+  const [pinnedSessionKeys, setPinnedSessionKeys] = useState<string[]>([]);
   const [inputPrefill, setInputPrefill] = useState('');
   const [isClient, setIsClient] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
@@ -625,6 +646,63 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       });
     }
   }, []);
+
+  const pinnedStorageKey = useMemo(
+    () => `${PINNED_SESSIONS_STORAGE_KEY}:${userId || 'guest'}`,
+    [userId]
+  );
+
+  const persistPinnedSessionKeys = useCallback(
+    (nextKeys: string[]) => {
+      if (!isClient) return;
+      try {
+        localStorage.setItem(pinnedStorageKey, JSON.stringify(nextKeys));
+      } catch {
+        // ignore localStorage errors
+      }
+    },
+    [isClient, pinnedStorageKey]
+  );
+
+  useEffect(() => {
+    if (!isClient) return;
+    let raw: unknown = null;
+    try {
+      raw = JSON.parse(localStorage.getItem(pinnedStorageKey) || 'null');
+    } catch {
+      raw = null;
+    }
+    const normalized = normalizePinnedSessionKeys(raw).filter((key) => key !== mainSessionKey);
+    setPinnedSessionKeys(normalized);
+  }, [isClient, mainSessionKey, pinnedStorageKey]);
+
+  useEffect(() => {
+    if (!isClient) return;
+    if (!sessions.length) return;
+    const known = new Set(sessions.map((session) => session.sessionKey));
+    setPinnedSessionKeys((prev) => {
+      const next = prev.filter((key) => key !== mainSessionKey && known.has(key));
+      if (next.length === prev.length) return prev;
+      persistPinnedSessionKeys(next);
+      return next;
+    });
+  }, [isClient, mainSessionKey, persistPinnedSessionKeys, sessions]);
+
+  const togglePinnedSession = useCallback(
+    (sessionKey: string) => {
+      if (!sessionKey) return;
+      if (sessionKey === mainSessionKey) return;
+      setPinnedSessionKeys((prev) => {
+        const has = prev.includes(sessionKey);
+        const next = has
+          ? prev.filter((key) => key !== sessionKey)
+          : normalizePinnedSessionKeys([sessionKey, ...prev]);
+        persistPinnedSessionKeys(next);
+        return next;
+      });
+    },
+    [mainSessionKey, persistPinnedSessionKeys]
+  );
 
   useEffect(() => {
     if (!currentSessionKey || !isConnected) return;
@@ -1199,12 +1277,14 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
           sessions={sessions}
           currentSessionKey={currentSessionKey}
           mainSessionKey={mainSessionKey}
+          pinnedSessionKeys={pinnedSessionKeys}
           isOpen={isSidebarOpen}
           onNewSession={() => {
             createNewSession();
           }}
           onSelectSession={handleSwitchSession}
           onDeleteSession={deleteSession}
+          onTogglePin={togglePinnedSession}
           onToggle={toggleSidebar}
           agentStatus={{
             isConnected,
