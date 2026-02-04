@@ -681,6 +681,13 @@ export class GatewayClient {
     await this.sendRequest('chat.abort', { sessionKey });
   }
 
+  async health(): Promise<unknown> {
+    if (!this.connected) {
+      throw new Error('Not connected to gateway');
+    }
+    return await this.sendRequest('health', {});
+  }
+
   onChat(handler: ChatHandler) {
     this.messageHandlers.add(handler);
     return () => this.messageHandlers.delete(handler);

@@ -35,7 +35,6 @@ import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { LoginModal } from '@/components/LoginModal';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { ToolStream } from '@/components/ToolStream';
-import { AnimatedText } from '@/components/AnimatedText';
 import { MessageGroup } from '@/components/MessageGroup';
 import { ReplayControls } from '@/components/ReplayControls';
 import { useReplayMode } from '@/hooks/useReplayMode';
@@ -127,13 +126,14 @@ const CAPABILITY_CATEGORIES = [
 ];
 
 const THINKING_PHRASES = [
-  'Thinking...',
+  'Got it — working on it…',
   'Pulling context...',
   'Cross-referencing...',
   'Composing response...',
   'Still working...',
 ];
 
+const FAST_ACK_DELAY_MS = 300;
 const PROFILE_SYNC_PREFIX = '[fc:profile-sync:v1]';
 const HISTORY_DISPLAY_LIMIT = 1000;
 
@@ -282,7 +282,8 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
-  const [showThinkingText, setShowThinkingText] = useState(true);
+  const [showFastAck, setShowFastAck] = useState(false);
+  const fastAckTimerRef = useRef<number | null>(null);
   const [inputPrefill, setInputPrefill] = useState('');
   const [isClient, setIsClient] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
@@ -562,6 +563,36 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   }, [streamingContent, showDetails, isNoiseText, isReplaying, replayStreamingContent]);
 
   useEffect(() => {
+    const shouldHide = !isLoading || Boolean(displayStreamingContent) || isReplaying;
+    if (shouldHide) {
+      setShowFastAck(false);
+      if (fastAckTimerRef.current !== null) {
+        window.clearTimeout(fastAckTimerRef.current);
+        fastAckTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (showFastAck) return;
+    if (fastAckTimerRef.current !== null) return;
+
+    fastAckTimerRef.current = window.setTimeout(() => {
+      fastAckTimerRef.current = null;
+      if (!isLoading) return;
+      if (isReplaying) return;
+      if (displayStreamingContent) return;
+      setShowFastAck(true);
+    }, FAST_ACK_DELAY_MS);
+
+    return () => {
+      if (fastAckTimerRef.current !== null) {
+        window.clearTimeout(fastAckTimerRef.current);
+        fastAckTimerRef.current = null;
+      }
+    };
+  }, [displayStreamingContent, isLoading, isReplaying, showFastAck]);
+
+  useEffect(() => {
     if (isReplaying) stopReplay();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSessionKey]);
@@ -601,17 +632,13 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   }, [currentSessionKey, isConnected, setSessionVerbose, showDetails]);
 
   useEffect(() => {
-    if (!isLoading || displayStreamingContent) return;
+    if (!isLoading || displayStreamingContent || isReplaying) return;
     const interval = window.setInterval(() => {
-      setShowThinkingText(false);
-      window.setTimeout(() => {
-        setThinkingIndex((prev) => (prev + 1) % THINKING_PHRASES.length);
-        setShowThinkingText(true);
-      }, 400);
+      setThinkingIndex((prev) => (prev + 1) % THINKING_PHRASES.length);
     }, 4000);
 
     return () => window.clearInterval(interval);
-  }, [isLoading, displayStreamingContent]);
+  }, [isLoading, displayStreamingContent, isReplaying]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -720,20 +747,6 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     } catch {
       return { success: false, error: 'An unexpected error occurred' };
     }
-  };
-
-  const handleSuggestionClick = (text: string, requiresInput = false) => {
-    if (requiresInput) {
-      setInputPrefill(text);
-    } else {
-      sendMessage({ text });
-    }
-  };
-
-  const handleSurpriseMe = () => {
-    const sendable = CAPABILITY_CATEGORIES.filter((c) => !c.requiresInput);
-    const randomIndex = Math.floor(Math.random() * sendable.length);
-    handleSuggestionClick(sendable[randomIndex].defaultAction, false);
   };
 
   const fetchProfile = useCallback(async () => {
@@ -859,6 +872,61 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     localStorage.setItem(storageKey, fingerprint);
     lastProfileSyncKeyRef.current = syncKey;
   }, [profile, isConnected, currentSessionKey, userId, sendMessage, sessionHints, recentLearning]);
+
+  const handleSend = useCallback(async (message: string, attachments: ChatAttachmentInput[] = []) => {
+    const trimmed = message.trim();
+    const hasAttachments = attachments.length > 0;
+    if (!trimmed && !hasAttachments) return;
+
+    setThinkingIndex(0);
+    setShowFastAck(false);
+    if (fastAckTimerRef.current !== null) {
+      window.clearTimeout(fastAckTimerRef.current);
+      fastAckTimerRef.current = null;
+    }
+
+    if (isGuest) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+
+    const hasProfileData =
+      Boolean(profile?.name?.trim()) ||
+      Boolean(profile?.role?.trim()) ||
+      Boolean(profile?.software?.length) ||
+      Boolean(profile?.frequentTopics?.length) ||
+      Boolean(profile?.learnedContext?.length) ||
+      Boolean(profile?.preferences && Object.keys(profile.preferences).length);
+
+    if (hasProfileData) {
+      try {
+        await syncProfileToAgent('initial');
+      } catch (err) {
+        console.error('Failed to sync profile to agent:', err);
+      }
+    }
+
+    captureSignalMessage(trimmed);
+    sendMessage({ text: trimmed, attachments });
+  }, [captureSignalMessage, isGuest, profile, sendMessage, setIsLoginModalOpen, syncProfileToAgent]);
+
+  const handleSuggestionClick = useCallback((text: string, requiresInput = false) => {
+    if (requiresInput || (!isGuest && !isConnected)) {
+      setInputPrefill(text);
+      return;
+    }
+    void handleSend(text, []);
+  }, [handleSend, isConnected, isGuest, setInputPrefill]);
+
+  const handleSurpriseMe = useCallback(() => {
+    const sendable = CAPABILITY_CATEGORIES.filter((c) => !c.requiresInput);
+    const pool = sendable.length > 0 ? sendable : CAPABILITY_CATEGORIES;
+    if (pool.length === 0) return;
+
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    const selected = pool[randomIndex];
+    handleSuggestionClick(selected.defaultAction, selected.requiresInput);
+  }, [handleSuggestionClick]);
 
   const saveProfile = useCallback(async (updatedProfile: UserProfile) => {
     setProfileSaving(true);
@@ -1375,6 +1443,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                           description={category.description}
                           color={category.color}
                           delay={index * 0.05}
+                          disabled={isLoading}
                           onClick={() =>
                             handleSuggestionClick(category.defaultAction, category.requiresInput)
                           }
@@ -1390,8 +1459,10 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                     transition={{ delay: 0.4, duration: 0.5 }}
                   >
                     <motion.button
+                      type="button"
                       onClick={handleSurpriseMe}
-                      className="mx-auto flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white rounded-full text-sm font-medium shadow-lg hover:shadow-xl transition-shadow"
+                      disabled={isLoading}
+                      className="mx-auto flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--fc-red)] to-[var(--fc-action-red)] text-white rounded-full text-sm font-medium shadow-lg hover:shadow-xl transition-shadow disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:shadow-lg"
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.8 }}
@@ -1432,25 +1503,29 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
                     />
                   )}
 
+                  {!displayStreamingContent && !isReplaying && showFastAck && (
+                    <ChatMessage
+                      messageId="fast-ack"
+                      content={THINKING_PHRASES[thinkingIndex]}
+                      role="assistant"
+                      isStreaming
+                    />
+                  )}
+
+                  {!displayStreamingContent && isReplaying && replayPhase === 'thinking' && (
+                    <ChatMessage
+                      messageId="replay-thinking"
+                      content="Thinking..."
+                      role="assistant"
+                      isStreaming
+                    />
+                  )}
+
                   <ToolStream
                     activeTools={activeTools}
                     isLoading={isLoading}
                     showDetails={showDetails}
                   />
-
-                  {(isReplaying ? replayPhase === 'thinking' : isLoading && !displayStreamingContent) && (
-                    <motion.div
-                      className="flex items-center gap-3 text-[var(--fc-body-gray)] pl-12"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      <AnimatedText
-                        text={THINKING_PHRASES[thinkingIndex]}
-                        isVisible={showThinkingText}
-                        className="text-sm text-[var(--fc-body-gray)]"
-                      />
-                    </motion.div>
-                  )}
 
 
                 </div>
@@ -1462,31 +1537,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
           {/* Chat Input */}
           {isReplaying ? null : (
             <ChatInput
-              onSend={async (message: string, attachments: ChatAttachmentInput[]) => {
-                if (isGuest) {
-                  setIsLoginModalOpen(true);
-                  return;
-                }
-
-                const hasProfileData =
-                  Boolean(profile?.name?.trim()) ||
-                  Boolean(profile?.role?.trim()) ||
-                  Boolean(profile?.software?.length) ||
-                  Boolean(profile?.frequentTopics?.length) ||
-                  Boolean(profile?.learnedContext?.length) ||
-                  Boolean(profile?.preferences && Object.keys(profile.preferences).length);
-
-                if (hasProfileData) {
-                  try {
-                    await syncProfileToAgent('initial');
-                  } catch (err) {
-                    console.error('Failed to sync profile to agent:', err);
-                  }
-                }
-
-                captureSignalMessage(message);
-                sendMessage({ text: message, attachments });
-              }}
+              onSend={handleSend}
               onAbort={handleAbortWithSignal}
               disabled={isLoading || (!isGuest && !isConnected)}
               isLoading={isLoading}

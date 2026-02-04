@@ -11,6 +11,7 @@ interface CapabilityCardProps {
   description: string;
   color: string;
   onClick?: () => void;
+  disabled?: boolean;
   delay?: number;
 }
 
@@ -20,12 +21,15 @@ export const CapabilityCard = memo(function CapabilityCard({
   description,
   color,
   onClick,
+  disabled = false,
   delay = 0,
 }: CapabilityCardProps) {
   return (
     <motion.button
+      type="button"
       onClick={onClick}
-      className="group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-white border border-[var(--fc-border-gray)] cursor-pointer h-full min-h-[160px] text-left"
+      disabled={disabled}
+      className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-white border border-[var(--fc-border-gray)] h-full min-h-[160px] text-left transition-opacity ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-[var(--fc-light-gray)]'}`}
       style={{
         boxShadow: '0 0 0 1px rgba(0,0,0,.03), 0 2px 4px rgba(0,0,0,.05), 0 12px 24px rgba(0,0,0,.05)',
       }}

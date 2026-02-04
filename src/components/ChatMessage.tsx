@@ -56,13 +56,31 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function CodeBlock({ children, className }: { children: string; className?: string }) {
-  const language = className?.replace('language-', '') || '';
+function extractTextFromReactNode(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractTextFromReactNode).join('');
+  if (typeof node === 'object' && 'props' in node) {
+    const element = node as { props?: { children?: React.ReactNode } };
+    return extractTextFromReactNode(element.props?.children);
+  }
+  return '';
+}
+
+function parseLanguage(className?: string): string {
+  if (!className) return '';
+  const match = className.match(/language-([A-Za-z0-9_-]+)/);
+  return match?.[1] ?? '';
+}
+
+function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
+  const language = parseLanguage(className);
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(children);
+      const text = extractTextFromReactNode(children).replace(/\n$/, '');
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -111,7 +129,7 @@ function CodeBlock({ children, className }: { children: string; className?: stri
 const markdownComponents: Components = {
   code({ className, children, ...props }) {
     const isInline = !className;
-    const content = String(children).replace(/\n$/, '');
+    const content = extractTextFromReactNode(children).replace(/\n$/, '');
 
     if (isInline) {
       return (
@@ -124,7 +142,7 @@ const markdownComponents: Components = {
       );
     }
 
-    return <CodeBlock className={className}>{content}</CodeBlock>;
+    return <CodeBlock className={className}>{children}</CodeBlock>;
   },
   pre({ children }) {
     return <>{children}</>;

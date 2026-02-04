@@ -222,6 +222,34 @@ function extractTextFromContent(content: unknown): string {
     .join('');
 }
 
+function mergeStreamingText(prev: string, next: string): string {
+  if (!prev) return next;
+  if (!next) return prev;
+  if (next === prev) return prev;
+  if (next.startsWith(prev)) return next;
+
+  // Best-effort overlap join to support both:
+  // - "full so far" payloads (next startsWith prev)
+  // - "delta chunk" payloads (next is just new text)
+  // - "sliding window" payloads (next includes tail of prev + new)
+  const maxOverlap = Math.min(prev.length, next.length, 4000);
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    if (prev.slice(-overlap) === next.slice(0, overlap)) {
+      return prev + next.slice(overlap);
+    }
+  }
+
+  return prev + next;
+}
+
+function chooseFinalText(streamText: string, eventText: string): string {
+  const streamTrimmed = streamText.trim();
+  const eventTrimmed = eventText.trim();
+  if (!eventTrimmed) return streamText;
+  if (!streamTrimmed) return eventText;
+  return eventText.length >= streamText.length ? eventText : streamText;
+}
+
 function formatTimestamp(): string {
   return new Date().toLocaleTimeString([], {
     hour: '2-digit',
@@ -350,6 +378,10 @@ const GATEWAY_AGENT_ID = 'work';
 const WEBCHAT_CHANNEL = 'webchat';
 // Gateway chat.history API enforces limit <= 1000
 const HISTORY_LIMIT = 1000;
+const GATEWAY_KEEPALIVE_INTERVAL_MS = 20_000;
+const GATEWAY_CONNECTION_MONITOR_INTERVAL_MS = 2_000;
+const GATEWAY_RECONNECT_BASE_DELAY_MS = 1_000;
+const GATEWAY_RECONNECT_MAX_DELAY_MS = 30_000;
 
 function buildSessionKey(peerId: string): string {
   return `agent:${GATEWAY_AGENT_ID}:${WEBCHAT_CHANNEL}:dm:${peerId}`;
@@ -419,6 +451,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
   const sessionIdByKeyRef = useRef<Map<string, string>>(new Map());
   const resetAtByKeyRef = useRef<Map<string, number>>(new Map());
   const errorTimeoutRef = useRef<number | null>(null);
+  const isLoadingRef = useRef(isLoading);
 
   useEffect(() => {
     return () => {
@@ -664,6 +697,10 @@ export function useGateway({ userId }: UseGatewayOptions) {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   const resetStreamingState = useCallback(() => {
     if (streamFrameRef.current !== null) {
@@ -973,6 +1010,14 @@ export function useGateway({ userId }: UseGatewayOptions) {
     let activeClient = createGatewayClient(wsUrl);
     clientRef.current = activeClient;
 
+    let reconnectTimer: number | null = null;
+    let monitorTimer: number | null = null;
+    let keepaliveTimer: number | null = null;
+    let reconnectInFlight = false;
+    let connectInFlight = false;
+    let reconnectAttempt = 0;
+    let pairingBlocked = false;
+
     const handleChatEvent = (event: ChatEventPayload) => {
       if (event.sessionKey !== currentSessionKeyRef.current) return;
 
@@ -1008,12 +1053,13 @@ export function useGateway({ userId }: UseGatewayOptions) {
       }
 
       if (event.state === 'delta' && event.message) {
-        const text = extractTextFromContent(
+        const nextText = extractTextFromContent(
           (event.message as { content?: unknown })?.content
         );
-        if (text) {
-          streamBufferRef.current = text;
-          streamPendingRef.current = text;
+        if (nextText) {
+          const merged = mergeStreamingText(streamBufferRef.current, nextText);
+          streamBufferRef.current = merged;
+          streamPendingRef.current = merged;
           if (streamFrameRef.current === null) {
             streamFrameRef.current = requestAnimationFrame(() => {
               streamFrameRef.current = null;
@@ -1033,7 +1079,8 @@ export function useGateway({ userId }: UseGatewayOptions) {
         streamPendingRef.current = '';
         const messageContent = (event.message as { content?: unknown })?.content;
         const blocks = normalizeContentBlocks(messageContent);
-        const finalText = streamBufferRef.current || extractTextFromContent(messageContent);
+        const eventText = extractTextFromContent(messageContent);
+        const finalText = chooseFinalText(streamBufferRef.current, eventText);
         const shouldDropReply = isNoReplyText(finalText);
 
         if (shouldDropReply) {
@@ -1084,7 +1131,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
       }
     };
 
-    let unsubscribe = activeClient.onChat(handleChatEvent);
+    let unsubscribeChat = activeClient.onChat(handleChatEvent);
 
     const handleToolEvent = (event: ToolEventPayload) => {
       if (event.sessionKey !== currentSessionKeyRef.current) return;
@@ -1128,8 +1175,47 @@ export function useGateway({ userId }: UseGatewayOptions) {
 
     let unsubscribeTool = activeClient.onTool(handleToolEvent);
 
+    const replaceClient = (url: string) => {
+      unsubscribeChat();
+      unsubscribeTool();
+      activeClient.disconnect();
+      activeClient = createGatewayClient(url);
+      clientRef.current = activeClient;
+      unsubscribeChat = activeClient.onChat(handleChatEvent);
+      unsubscribeTool = activeClient.onTool(handleToolEvent);
+    };
+
+    const markDisconnected = (message?: string) => {
+      setIsConnected(false);
+      if (message) setError(message);
+      if (isLoadingRef.current || streamBufferRef.current) {
+        resetStreamingState();
+      }
+    };
+
+    const startKeepalive = () => {
+      if (keepaliveTimer !== null) {
+        window.clearInterval(keepaliveTimer);
+        keepaliveTimer = null;
+      }
+      keepaliveTimer = window.setInterval(async () => {
+        const client = clientRef.current;
+        if (!client || !client.isConnected()) return;
+        try {
+          await client.health();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Gateway keepalive failed';
+          markDisconnected(message);
+          // Keepalive is the earliest reliable signal of a dead socket behind proxies.
+          // Reconnect quickly so chat history can refresh without a full page reload.
+          scheduleReconnect(`keepalive_failed:${message}`, true);
+        }
+      }, GATEWAY_KEEPALIVE_INTERVAL_MS);
+    };
+
     const connect = async () => {
       const connectClient = async (client: GatewayClient) => {
+        connectInFlight = true;
         await client.connect();
         setIsConnected(true);
         setError(null);
@@ -1139,51 +1225,142 @@ export function useGateway({ userId }: UseGatewayOptions) {
         applyGatewaySessions(sessionList);
         await ensureMainSessionLabel(sessionList);
         await flushPendingTitleUpdates();
+        connectInFlight = false;
+        startKeepalive();
       };
 
-      try {
-        await connectClient(activeClient);
-      } catch (err) {
+      const handleConnectError = (err: unknown) => {
         const errorMessage = err instanceof Error ? err.message : 'Connection failed';
         if (errorMessage.startsWith('PAIRING_REQUIRED')) {
           const pairingCode = errorMessage.split(':')[1] || 'unknown';
           setError(`Authorization required. Your pairing code: ${pairingCode}. Please contact admin to approve.`);
           setIsConnected(false);
-          return;
+          pairingBlocked = true;
+          return { handled: true };
         }
+        return { handled: false, message: errorMessage };
+      };
+
+      try {
+        await connectClient(activeClient);
+      } catch (err) {
+        connectInFlight = false;
+        const handled = handleConnectError(err);
+        if (handled.handled) return;
+        const errorMessage = handled.message ?? 'Connection failed';
 
         if (fallbackUrl) {
           console.warn(`[Gateway] Primary connection failed (${wsUrl}); retrying local gateway.`);
-          unsubscribe();
-          unsubscribeTool();
-          activeClient.disconnect();
-
-          activeClient = createGatewayClient(fallbackUrl);
-          clientRef.current = activeClient;
-          unsubscribe = activeClient.onChat(handleChatEvent);
-          unsubscribeTool = activeClient.onTool(handleToolEvent);
+          replaceClient(fallbackUrl);
 
           try {
             await connectClient(activeClient);
           } catch (fallbackErr) {
-            const fallbackMessage =
-              fallbackErr instanceof Error ? fallbackErr.message : 'Connection failed';
+            connectInFlight = false;
+            const fallbackHandled = handleConnectError(fallbackErr);
+            if (fallbackHandled.handled) return;
+            const fallbackMessage = fallbackHandled.message ?? 'Connection failed';
             setError(`Primary gateway failed (${errorMessage}). Local fallback failed (${fallbackMessage}).`);
             setIsConnected(false);
+            markDisconnected();
+            scheduleReconnect(`initial_failed:${fallbackMessage}`);
           }
           return;
         }
 
         setError(errorMessage);
         setIsConnected(false);
+        markDisconnected();
+        scheduleReconnect(`initial_failed:${errorMessage}`);
+      }
+    };
+
+    const scheduleReconnect = (reason: string, immediate = false) => {
+      if (pairingBlocked) return;
+      if (reconnectInFlight || connectInFlight) return;
+      if (reconnectTimer !== null) return;
+
+      const attempt = reconnectAttempt;
+      const baseDelay = Math.min(
+        GATEWAY_RECONNECT_MAX_DELAY_MS,
+        GATEWAY_RECONNECT_BASE_DELAY_MS * 2 ** attempt
+      );
+      const jitter = Math.round(Math.random() * 500);
+      const delay = immediate ? 0 : baseDelay + jitter;
+
+      reconnectAttempt = Math.min(reconnectAttempt + 1, 6);
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        void reconnectNow(reason);
+      }, delay);
+    };
+
+    const reconnectNow = async (reason: string) => {
+      if (pairingBlocked) return;
+      if (reconnectInFlight || connectInFlight) return;
+      reconnectInFlight = true;
+      try {
+        // Force a fresh WS instance; GatewayClient.connect() cannot be reused after close.
+        replaceClient(wsUrl);
+        await activeClient.connect();
+        setIsConnected(true);
+        setError(null);
+        reconnectAttempt = 0;
+        startKeepalive();
+
+        await hydrateSessionTitlesFromSupabase();
+        const sessionList = await activeClient.listSessions();
+        applyGatewaySessions(sessionList);
+        await ensureMainSessionLabel(sessionList);
+        await flushPendingTitleUpdates();
+      } catch (err) {
+        const handled = (() => {
+          const errorMessage = err instanceof Error ? err.message : 'Connection failed';
+          if (errorMessage.startsWith('PAIRING_REQUIRED')) {
+            const pairingCode = errorMessage.split(':')[1] || 'unknown';
+            setError(`Authorization required. Your pairing code: ${pairingCode}. Please contact admin to approve.`);
+            setIsConnected(false);
+            pairingBlocked = true;
+            return { handled: true };
+          }
+          return { handled: false, message: errorMessage };
+        })();
+        if (!handled.handled) {
+          setError(`Gateway disconnected (${reason}). Reconnecting...`);
+          setIsConnected(false);
+          scheduleReconnect(`reconnect_failed:${handled.message}`);
+        }
+      } finally {
+        reconnectInFlight = false;
       }
     };
 
     connect();
 
     const timers = toolRemovalTimersRef.current;
+    monitorTimer = window.setInterval(() => {
+      const client = clientRef.current;
+      if (!client) return;
+      if (connectInFlight || reconnectInFlight) return;
+      if (!client.isConnected()) {
+        markDisconnected('Gateway disconnected. Reconnecting...');
+        scheduleReconnect('socket_closed');
+      }
+    }, GATEWAY_CONNECTION_MONITOR_INTERVAL_MS);
     return () => {
-      unsubscribe();
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (monitorTimer !== null) {
+        window.clearInterval(monitorTimer);
+        monitorTimer = null;
+      }
+      if (keepaliveTimer !== null) {
+        window.clearInterval(keepaliveTimer);
+        keepaliveTimer = null;
+      }
+      unsubscribeChat();
       unsubscribeTool();
       activeClient.disconnect();
       clientRef.current = null;
@@ -1194,7 +1371,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
       timers.forEach((timeoutId) => window.clearTimeout(timeoutId));
       timers.clear();
     };
-  }, [userId, applyGatewaySessions, ensureMainSessionLabel, flushPendingTitleUpdates, hydrateSessionTitlesFromSupabase]);
+  }, [userId, applyGatewaySessions, ensureMainSessionLabel, flushPendingTitleUpdates, hydrateSessionTitlesFromSupabase, resetStreamingState]);
 
   useEffect(() => {
     if (!clientRef.current || !clientRef.current.isConnected() || !currentSessionKey) {
