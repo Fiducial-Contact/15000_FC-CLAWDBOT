@@ -135,8 +135,14 @@ const THINKING_PHRASES = [
 
 const FAST_ACK_DELAY_MS = 300;
 const PINNED_SESSIONS_STORAGE_KEY = 'fc-pinned-sessions';
+const PINNED_SESSIONS_API_PATH = '/api/pinned-sessions';
 const MAX_PINNED_SESSIONS = 50;
 const MAX_SESSION_KEY_LENGTH = 512;
+
+type StoredPinnedSessions = {
+  keys: string[];
+  updatedAtMs: number;
+};
 
 function normalizePinnedSessionKeys(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -153,6 +159,18 @@ function normalizePinnedSessionKeys(value: unknown): string[] {
     if (keys.length >= MAX_PINNED_SESSIONS) break;
   }
   return keys;
+}
+
+function normalizeStoredPinnedSessions(value: unknown): StoredPinnedSessions {
+  if (Array.isArray(value)) {
+    return { keys: normalizePinnedSessionKeys(value), updatedAtMs: 0 };
+  }
+  if (!value || typeof value !== 'object') {
+    return { keys: [], updatedAtMs: 0 };
+  }
+  const record = value as Record<string, unknown>;
+  const updatedAtMs = typeof record.updatedAtMs === 'number' ? record.updatedAtMs : 0;
+  return { keys: normalizePinnedSessionKeys(record.keys), updatedAtMs };
 }
 const PROFILE_SYNC_PREFIX = '[fc:profile-sync:v1]';
 const HISTORY_DISPLAY_LIMIT = 1000;
@@ -305,6 +323,9 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
   const [showFastAck, setShowFastAck] = useState(false);
   const fastAckTimerRef = useRef<number | null>(null);
   const [pinnedSessionKeys, setPinnedSessionKeys] = useState<string[]>([]);
+  const pinnedUpdatedAtMsRef = useRef<number>(0);
+  const pinnedSessionKeysRef = useRef<string[]>([]);
+  const [pinnedHydrated, setPinnedHydrated] = useState(false);
   const [inputPrefill, setInputPrefill] = useState('');
   const [isClient, setIsClient] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
@@ -652,17 +673,100 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     [userId]
   );
 
-  const persistPinnedSessionKeys = useCallback(
-    (nextKeys: string[]) => {
+  useEffect(() => {
+    pinnedSessionKeysRef.current = pinnedSessionKeys;
+  }, [pinnedSessionKeys]);
+
+  const persistPinnedSessions = useCallback(
+    (next: StoredPinnedSessions) => {
       if (!isClient) return;
       try {
-        localStorage.setItem(pinnedStorageKey, JSON.stringify(nextKeys));
+        localStorage.setItem(pinnedStorageKey, JSON.stringify(next));
       } catch {
         // ignore localStorage errors
       }
     },
     [isClient, pinnedStorageKey]
   );
+
+  const pushPinnedSessionsToSupabase = useCallback(
+    async (next: StoredPinnedSessions) => {
+      if (isGuest) return;
+      try {
+        const res = await fetch(PINNED_SESSIONS_API_PATH, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(next),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          console.error(
+            'Failed to save pinned sessions:',
+            (data as { error?: string }).error || res.statusText
+          );
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        const remotePinned = normalizeStoredPinnedSessions(
+          (data as { pinnedSessions?: unknown }).pinnedSessions
+        );
+        const normalizedKeys = remotePinned.keys.filter((key) => key !== mainSessionKey);
+        pinnedUpdatedAtMsRef.current = remotePinned.updatedAtMs;
+        setPinnedSessionKeys(normalizedKeys);
+        persistPinnedSessions({ keys: normalizedKeys, updatedAtMs: remotePinned.updatedAtMs });
+      } catch (err) {
+        console.error('Failed to save pinned sessions:', err);
+      }
+    },
+    [isGuest, mainSessionKey, persistPinnedSessions]
+  );
+
+  const hydratePinnedSessionsFromSupabase = useCallback(async () => {
+    if (isGuest) return;
+    try {
+      const res = await fetch(PINNED_SESSIONS_API_PATH);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error(
+          'Failed to load pinned sessions:',
+          (data as { error?: string }).error || res.statusText
+        );
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      const remotePinned = normalizeStoredPinnedSessions(
+        (data as { pinnedSessions?: unknown }).pinnedSessions
+      );
+      const normalizedKeys = remotePinned.keys.filter((key) => key !== mainSessionKey);
+      const remoteNormalized: StoredPinnedSessions = {
+        keys: normalizedKeys,
+        updatedAtMs: remotePinned.updatedAtMs,
+      };
+
+      const localUpdatedAtMs = pinnedUpdatedAtMsRef.current;
+      const localKeys = pinnedSessionKeysRef.current.filter((key) => key !== mainSessionKey);
+      const shouldUseRemote =
+        (remoteNormalized.updatedAtMs ?? 0) > (localUpdatedAtMs ?? 0) ||
+        ((remoteNormalized.updatedAtMs ?? 0) === (localUpdatedAtMs ?? 0) &&
+          remoteNormalized.keys.length >= localKeys.length);
+
+      if (shouldUseRemote) {
+        pinnedUpdatedAtMsRef.current = remoteNormalized.updatedAtMs;
+        setPinnedSessionKeys(remoteNormalized.keys);
+        persistPinnedSessions(remoteNormalized);
+        return;
+      }
+
+      void pushPinnedSessionsToSupabase({ keys: localKeys, updatedAtMs: localUpdatedAtMs });
+    } catch (err) {
+      console.error('Failed to load pinned sessions:', err);
+    }
+  }, [
+    isGuest,
+    mainSessionKey,
+    persistPinnedSessions,
+    pushPinnedSessionsToSupabase,
+  ]);
 
   useEffect(() => {
     if (!isClient) return;
@@ -672,21 +776,21 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     } catch {
       raw = null;
     }
-    const normalized = normalizePinnedSessionKeys(raw).filter((key) => key !== mainSessionKey);
-    setPinnedSessionKeys(normalized);
-  }, [isClient, mainSessionKey, pinnedStorageKey]);
+    const stored = normalizeStoredPinnedSessions(raw);
+    const normalizedKeys = stored.keys.filter((key) => key !== mainSessionKey);
+    const normalized: StoredPinnedSessions = { keys: normalizedKeys, updatedAtMs: stored.updatedAtMs };
+    pinnedUpdatedAtMsRef.current = normalized.updatedAtMs;
+    setPinnedSessionKeys(normalized.keys);
+    persistPinnedSessions(normalized);
+    setPinnedHydrated(true);
+  }, [isClient, mainSessionKey, persistPinnedSessions, pinnedStorageKey]);
 
   useEffect(() => {
     if (!isClient) return;
-    if (!sessions.length) return;
-    const known = new Set(sessions.map((session) => session.sessionKey));
-    setPinnedSessionKeys((prev) => {
-      const next = prev.filter((key) => key !== mainSessionKey && known.has(key));
-      if (next.length === prev.length) return prev;
-      persistPinnedSessionKeys(next);
-      return next;
-    });
-  }, [isClient, mainSessionKey, persistPinnedSessionKeys, sessions]);
+    if (!pinnedHydrated) return;
+    if (isGuest) return;
+    void hydratePinnedSessionsFromSupabase();
+  }, [hydratePinnedSessionsFromSupabase, isClient, isGuest, pinnedHydrated]);
 
   const togglePinnedSession = useCallback(
     (sessionKey: string) => {
@@ -694,14 +798,36 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
       if (sessionKey === mainSessionKey) return;
       setPinnedSessionKeys((prev) => {
         const has = prev.includes(sessionKey);
-        const next = has
+        const nextKeys = has
           ? prev.filter((key) => key !== sessionKey)
           : normalizePinnedSessionKeys([sessionKey, ...prev]);
-        persistPinnedSessionKeys(next);
-        return next;
+        const updatedAtMs = Date.now();
+        pinnedUpdatedAtMsRef.current = updatedAtMs;
+        const next: StoredPinnedSessions = { keys: nextKeys, updatedAtMs };
+        persistPinnedSessions(next);
+        void pushPinnedSessionsToSupabase(next);
+        return nextKeys;
       });
     },
-    [mainSessionKey, persistPinnedSessionKeys]
+    [mainSessionKey, persistPinnedSessions, pushPinnedSessionsToSupabase]
+  );
+
+  const handleDeleteSession = useCallback(
+    (sessionKey: string) => {
+      if (!sessionKey) return;
+      setPinnedSessionKeys((prev) => {
+        if (!prev.includes(sessionKey)) return prev;
+        const nextKeys = prev.filter((key) => key !== sessionKey);
+        const updatedAtMs = Date.now();
+        pinnedUpdatedAtMsRef.current = updatedAtMs;
+        const next: StoredPinnedSessions = { keys: nextKeys, updatedAtMs };
+        persistPinnedSessions(next);
+        void pushPinnedSessionsToSupabase(next);
+        return nextKeys;
+      });
+      deleteSession(sessionKey);
+    },
+    [deleteSession, persistPinnedSessions, pushPinnedSessionsToSupabase]
   );
 
   useEffect(() => {
@@ -1283,7 +1409,7 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
             createNewSession();
           }}
           onSelectSession={handleSwitchSession}
-          onDeleteSession={deleteSession}
+          onDeleteSession={handleDeleteSession}
           onTogglePin={togglePinnedSession}
           onToggle={toggleSidebar}
           agentStatus={{
