@@ -126,7 +126,7 @@ const CAPABILITY_CATEGORIES = [
 ];
 
 const THINKING_PHRASES = [
-  'Got it — working on it…',
+  'Thinking...',
   'Pulling context...',
   'Cross-referencing...',
   'Composing response...',
