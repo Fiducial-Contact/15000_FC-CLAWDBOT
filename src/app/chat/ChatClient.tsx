@@ -792,6 +792,17 @@ export function ChatClient({ userEmail, userId }: ChatClientProps) {
     void hydratePinnedSessionsFromSupabase();
   }, [hydratePinnedSessionsFromSupabase, isClient, isGuest, pinnedHydrated]);
 
+  useEffect(() => {
+    if (!isClient) return;
+    if (!pinnedHydrated) return;
+    if (isGuest) return;
+    const onOnline = () => {
+      void hydratePinnedSessionsFromSupabase();
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [hydratePinnedSessionsFromSupabase, isClient, isGuest, pinnedHydrated]);
+
   const togglePinnedSession = useCallback(
     (sessionKey: string) => {
       if (!sessionKey) return;
