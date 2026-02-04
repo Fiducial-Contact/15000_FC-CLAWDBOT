@@ -857,7 +857,6 @@ export function useGateway({ userId }: UseGatewayOptions) {
                 ...session,
                 displayName: normalizedTitle,
                 label: normalizedTitle,
-                updatedAt: new Date().toISOString(),
               }
             : session
         )

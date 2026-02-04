@@ -145,11 +145,15 @@ function getSessionTitle(session: SessionListEntry): string {
 function formatSessionDate(dateStr?: string): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return '';
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const startOfNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((startOfNow.getTime() - startOfDate.getTime()) / MS_PER_DAY);
 
-  if (diffDays === 0) {
+  // Treat future/skewed timestamps as "today" for display purposes.
+  if (diffDays <= 0) {
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = date.getMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
@@ -166,15 +170,23 @@ function groupSessionsByDate(sessions: SessionListEntry[]) {
   const previous: SessionListEntry[] = [];
 
   sessions.forEach((session) => {
-    if (!session.updatedAt) {
+    const sessionTimestamp = session.updatedAt || session.createdAt;
+    if (!sessionTimestamp) {
       previous.push(session);
       return;
     }
-    const date = new Date(session.updatedAt);
+    const date = new Date(sessionTimestamp);
+    if (Number.isNaN(date.getTime())) {
+      previous.push(session);
+      return;
+    }
     const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    const startOfNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays = Math.round((startOfNow.getTime() - startOfDate.getTime()) / MS_PER_DAY);
 
-    if (diffDays === 0) today.push(session);
+    if (diffDays <= 0) today.push(session);
     else if (diffDays === 1) yesterday.push(session);
     else previous.push(session);
   });
@@ -487,6 +499,7 @@ export const ChatSidebar = memo(function ChatSidebar({
   const renderSession = (session: SessionListEntry, isPinned: boolean) => {
     const isActive = session.sessionKey === currentSessionKey;
     const unreadCount = session.unreadCount || 0;
+    const sessionTimestamp = session.updatedAt || session.createdAt;
     return (
       <motion.div
         key={session.sessionKey}
@@ -539,7 +552,7 @@ export const ChatSidebar = memo(function ChatSidebar({
                 className={`text-[10px] transition-all duration-150 ${isActive ? 'text-white/60' : 'text-[var(--fc-light-gray)]'
                   } ${!isPinned ? 'group-hover:hidden' : ''}`}
               >
-                {formatSessionDate(session.updatedAt)}
+                {formatSessionDate(sessionTimestamp)}
               </span>
               {!isPinned && (
                 <button
