@@ -5,7 +5,7 @@ export interface GatewayMessage {
   params?: Record<string, unknown>;
   ok?: boolean;
   payload?: unknown;
-  error?: { code: string; message: string };
+  error?: { code: string; message: string; details?: Record<string, unknown> };
   event?: string;
   seq?: number;
 }

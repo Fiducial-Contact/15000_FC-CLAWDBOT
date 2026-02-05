@@ -400,7 +400,16 @@ export class GatewayClient {
         if (msg.ok) {
           pending.resolve(msg.payload);
         } else {
-          pending.reject(new Error(msg.error?.message || 'Request failed'));
+          const error = msg.error;
+          const requestId =
+            error?.code === 'NOT_PAIRED' && typeof error.details?.requestId === 'string'
+              ? error.details.requestId
+              : null;
+          if (requestId) {
+            pending.reject(new Error(`PAIRING_REQUIRED:${requestId}`));
+          } else {
+            pending.reject(new Error(error?.message || 'Request failed'));
+          }
         }
       }
 
@@ -566,14 +575,20 @@ export class GatewayClient {
         clearDeviceAuthToken({ deviceId: deviceIdentity.deviceId, role });
       }
       const errorMessage = err instanceof Error ? err.message : 'Connect failed';
+      if (errorMessage.startsWith('PAIRING_REQUIRED:')) {
+        this.connectReject?.(new Error(errorMessage));
+        return;
+      }
+
       const isPairingRequired = errorMessage.toLowerCase().includes('pairing');
       if (isPairingRequired) {
-        const codeMatch = errorMessage.match(/code[:\s]+([A-Z0-9-]+)/i);
+        const codeMatch = errorMessage.match(/code[:\\s]+([A-Z0-9-]+)/i);
         const pairingCode = codeMatch?.[1] || deviceIdentity?.deviceId?.slice(0, 8) || 'unknown';
         this.connectReject?.(new Error(`PAIRING_REQUIRED:${pairingCode}`));
-      } else {
-        this.connectReject?.(err instanceof Error ? err : new Error('Connect failed'));
+        return;
       }
+
+      this.connectReject?.(err instanceof Error ? err : new Error('Connect failed'));
     }
   }
 
