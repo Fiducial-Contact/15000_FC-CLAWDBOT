@@ -1325,7 +1325,7 @@ export function useGateway({ userId }: UseGatewayOptions) {
           return { handled: false, message: errorMessage };
         })();
         if (!handled.handled) {
-          setError(`Gateway disconnected (${reason}). Reconnecting...`);
+          setError((prev) => prev ?? `Gateway disconnected (${reason}). Reconnecting...`);
           setIsConnected(false);
           scheduleReconnect(`reconnect_failed:${handled.message}`);
         }
@@ -1342,7 +1342,8 @@ export function useGateway({ userId }: UseGatewayOptions) {
       if (!client) return;
       if (connectInFlight || reconnectInFlight) return;
       if (!client.isConnected()) {
-        markDisconnected('Gateway disconnected. Reconnecting...');
+        markDisconnected();
+        setError((prev) => prev ?? 'Gateway disconnected. Reconnecting...');
         scheduleReconnect('socket_closed');
       }
     }, GATEWAY_CONNECTION_MONITOR_INTERVAL_MS);
